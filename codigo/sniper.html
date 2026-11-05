@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Sniper do Mercado</title>
+<style>
+  :root { --bg:#151515; --box:#1f1f23; --linha:#2a2a30; --fg:#eee; --mut:#9a9a9a; --ok:#3fb950; --av:#f5c518; --rx:#c792ff; --rv:#e2483d; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:13px system-ui, "Segoe UI", sans-serif; }
+  main { padding:12px; display:flex; flex-direction:column; gap:10px; }
+  h2 { margin:0 0 6px; font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--mut); }
+  .box { background:var(--box); border:1px solid var(--linha); border-radius:8px; padding:10px; }
+  .linha { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .sp { flex:1; }
+  button { height:28px; padding:0 10px; border-radius:6px; border:1px solid #3a3a42; background:#26262c; color:var(--fg); cursor:pointer; font:inherit; }
+  button:hover { background:#32323a; }
+  button.prim { background:#6b3fd6; border-color:#6b3fd6; }
+  button:disabled { opacity:.5; cursor:default; }
+  input[type=number], input[type=text], select { height:26px; background:#000; color:#fff; border:1px solid #444; border-radius:5px; padding:0 6px; font:inherit; }
+  input[type=number] { width:86px; }
+  .modo { font-weight:700; padding:4px 10px; border-radius:6px; }
+  .modo.sim { background:#3a3320; color:var(--av); }
+  .modo.real { background:#3a1f1f; color:#ff8a80; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--rv); display:inline-block; flex:none; }
+  .dot.ok { background:var(--ok); }
+  /* As abas das contas: cada uma com a conexão, o modo e quantos alvos estão ligados */
+  .abas { display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; }
+  .aba { height:auto; padding:6px 8px; display:flex; flex-direction:column; align-items:flex-start; gap:3px; text-align:left; }
+  .aba.on { border-color:#6b3fd6; background:#2a2240; }
+  .aba .topo { display:flex; align-items:center; gap:6px; width:100%; }
+  .aba b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .chip { font-size:10px; font-weight:700; padding:1px 5px; border-radius:4px; }
+  .chip.sim { background:#3a3320; color:var(--av); } .chip.real { background:#3a1f1f; color:#ff8a80; }
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; font-size:11px; color:var(--mut); font-weight:600; padding:4px; }
+  td { padding:4px; border-top:1px solid var(--linha); vertical-align:middle; }
+  td.nome { font-weight:600; }
+  td.nome small { display:block; font-weight:400; color:var(--mut); font-size:11px; }
+  .tag { font-size:10px; font-weight:700; padding:1px 5px; border-radius:4px; margin-right:4px; }
+  .tag.it { background:#2a3a20; color:#9be36b; } .tag.pk { background:#3a2240; color:var(--rx); }
+  .mut { color:var(--mut); font-size:12px; }
+  .vazio { color:var(--mut); padding:8px 0; }
+  #log { max-height:210px; overflow-y:auto; font:12px Consolas, monospace; white-space:pre-wrap; }
+  #log .comprou { color:var(--ok); font-weight:700; }
+  #log .sim { color:var(--av); }
+  .x { cursor:pointer; color:var(--mut); padding:0 4px; }
+  .x:hover { color:var(--rv); }
+  .form { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:6px 10px; margin-top:6px; }
+  .form label { display:flex; flex-direction:column; gap:3px; font-size:11px; color:var(--mut); }
+  .form input, .form select { width:100%; }
+  .aviso { color:#ffb86b; font-size:12px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="abas" id="abas"></div>
+
+  <div class="box">
+    <div class="linha">
+      <span class="dot" id="con"></span><span id="conTxt" class="mut"></span>
+      <span class="sp"></span>
+      <span class="modo" id="modo"></span>
+      <button id="trocarModo"></button>
+    </div>
+    <div class="linha" style="margin-top:8px">
+      <span class="mut">Consultar cada alvo a cada</span>
+      <input type="number" id="intervalo" min="20" max="600"> <span class="mut">segundos (mínimo 20; vale para as 4 contas)</span>
+    </div>
+    <div id="ritmo" class="mut" style="margin-top:4px"></div>
+    <div id="pausa" class="aviso" style="margin-top:6px;display:none"></div>
+  </div>
+
+  <div class="box">
+    <h2 id="titAlvos">Alvos</h2>
+    <table>
+      <thead><tr><th>Alvo</th><th>Preço máx/un</th><th>Comprar até</th><th>Comprados</th><th>Menor visto</th><th>Ligado</th><th></th></tr></thead>
+      <tbody id="alvos"></tbody>
+    </table>
+    <div class="linha" style="margin-top:6px"><span class="sp"></span><button id="zerar" title="Zera a contagem de comprados desta conta (o limite volta a valer do zero)">Zerar comprados</button></div>
+  </div>
+
+  <div class="box">
+    <h2>Adicionar item</h2>
+    <div class="linha">
+      <span class="mut" id="ultimo">Abra um item no Mercado (RMT) de qualquer conta para poder adicionar.</span>
+      <span class="sp"></span>
+      <button id="adicionar" class="prim" disabled>+ Adicionar este item</button>
+    </div>
+  </div>
+
+  <div class="box">
+    <h2>Copiar a lista de outra conta</h2>
+    <div class="linha">
+      <span class="mut">Trazer para esta conta os alvos da</span>
+      <select id="copiarDe"></select>
+      <button id="copiar">Copiar</button>
+    </div>
+    <div class="mut" style="margin-top:4px">Só entram os alvos que esta conta ainda não tem, com o mesmo preço, quantidade e ligado ou desligado. O que cada conta comprou continua separado.</div>
+  </div>
+
+  <div class="box">
+    <h2>Adicionar pokémon</h2>
+    <div class="form">
+      <label>Espécie<input type="text" id="pk-especie" list="lista-especies" placeholder="Qualquer pokémon"></label>
+      <label>Moeda<select id="pk-moeda"><option value="orb">Gemas</option><option value="gold">Coins</option></select></label>
+      <label>Preço máximo<input type="number" id="pk-preco" min="1" placeholder="obrigatório"></label>
+      <label>Comprar até (0 = sem limite)<input type="number" id="pk-qtd" min="0" value="1"></label>
+      <label>Nota mínima<input type="number" id="pk-notaMin" step="0.01" placeholder="qualquer"></label>
+      <label>Nível mínimo<input type="number" id="pk-nivelMin" placeholder="qualquer"></label>
+      <label>IV mínimo<input type="number" id="pk-ivMin" placeholder="qualquer"></label>
+      <label>Qualidade mínima<input type="number" id="pk-qualidadeMin" step="0.01" placeholder="qualquer"></label>
+      <label>Potência mínima<input type="number" id="pk-potenciaMin" min="1" max="5" placeholder="qualquer"></label>
+      <label>Shiny<select id="pk-shiny"><option value="todos">tanto faz</option><option value="so">só shiny</option><option value="nao">sem shiny</option></select></label>
+    </div>
+    <datalist id="lista-especies"></datalist>
+    <div class="linha" style="margin-top:8px">
+      <span class="mut" id="pk-dica">Deixe a espécie vazia para comprar <b>qualquer pokémon</b> abaixo do preço (com os filtros que você puser).</span>
+      <span class="sp"></span>
+      <button id="pk-add" class="prim">+ Adicionar pokémon</button>
+    </div>
+  </div>
+
+  <div class="box">
+    <h2>Aguardando liberar</h2>
+    <div id="agendados" class="mut">Nenhum.</div>
+  </div>
+
+  <div class="box">
+    <h2 id="titLog">Registro</h2>
+    <div id="log"></div>
+  </div>
+</main>
+<script>
+  // O app manda a config de todas (`cg`: o intervalo e, em `contas`, a lista, o modo e os comprados de cada uma), o
+  // estado da página de cada conta (`sts`) e qual delas olha o Mercado. A janela mostra uma conta por vez (`conta`).
+  let sts = [], cg = null, nomes = [], olheiro = 0, nConsultas = 0, especies = {}, editando = false, conta = 0;
+  try { conta = Math.min(3, Math.max(0, Math.floor(Number(localStorage.getItem('sn.conta')) || 0))); } catch {}
+  const $ = id => document.getElementById(id);
+  const moedaTxt = m => (m === 'gold' ? 'coins' : 'gemas');
+  const hora = ms => new Date(ms).toLocaleTimeString('pt-BR');
+  const nomeDa = i => nomes[i] || 'Conta ' + (i + 1);
+  const C = () => cg.contas[conta];
+  const salvar = parcial => api.snSalvar({ conta, ...parcial });
+  const ehPk = a => a.tipo === 'pokemon';
+  const chave = a => (ehPk(a) ? 'pk:' + a.uid : a.itemId + ':' + a.moeda);
+  // O mesmo alvo em duas contas: o mesmo item na mesma moeda, ou o pokémon com a mesma espécie, moeda e filtros
+  const igual = (a, b) => (ehPk(a)
+    ? ehPk(b) && a.moeda === b.moeda && (a.especie || 0) === (b.especie || 0) && JSON.stringify(a.filtros || {}) === JSON.stringify(b.filtros || {})
+    : !ehPk(b) && a.itemId === b.itemId && a.moeda === b.moeda);
+  const temMenor = v => v && v.menor != null && isFinite(v.menor);
+  const fmt = v => {
+    if (v == null || !isFinite(v)) return '—';
+    const a = Math.abs(v);
+    for (const [lim, div, s] of [[1e12, 1e12, 'T'], [1e9, 1e9, 'B'], [1e6, 1e6, 'M'], [1e4, 1e3, 'K']]) if (a >= lim) return (v / div).toLocaleString('pt-BR', { maximumFractionDigits: v / div >= 100 ? 0 : 1 }) + s;
+    return Math.round(v).toLocaleString('pt-BR');
+  };
+  const resumoFiltros = f => {
+    if (!f) return '';
+    const p = [];
+    if (f.notaMin !== '' && f.notaMin != null) p.push('N≥' + f.notaMin);
+    if (f.nivelMin !== '' && f.nivelMin != null) p.push('Nv≥' + f.nivelMin);
+    if (f.ivMin !== '' && f.ivMin != null) p.push('IV≥' + f.ivMin);
+    if (f.qualidadeMin !== '' && f.qualidadeMin != null) p.push('Q≥' + f.qualidadeMin);
+    if (f.potenciaMin !== '' && f.potenciaMin != null) p.push('P≥' + f.potenciaMin);
+    if (f.shiny === 'so') p.push('só shiny'); if (f.shiny === 'nao') p.push('sem shiny');
+    return p.join(' · ');
+  };
+  // O item aberto por último no Mercado de qualquer conta: entra na lista da conta escolhida aqui
+  const ultimoItem = () => {
+    let u = null;
+    sts.forEach((s, i) => { const x = s?.ultimoItem; if (x && (!u || x.em > u.em)) u = { ...x, conta: i }; });
+    return u;
+  };
+
+  function abas() {
+    const el = $('abas');
+    el.innerHTML = '';
+    cg.contas.forEach((c, i) => {
+      const n = c.alvos.filter(a => a.ativo).length;
+      const b = document.createElement('button');
+      b.className = 'aba' + (i === conta ? ' on' : '');
+      b.title = i === olheiro ? 'Esta conta olha o Mercado para as 4' : '';
+      b.innerHTML = `<span class="topo"><span class="dot${sts[i]?.conectado ? ' ok' : ''}"></span><b></b></span>
+        <span class="linha"><span class="chip ${c.simular ? 'sim' : 'real'}">${c.simular ? 'SIMULAÇÃO' : 'COMPRANDO'}</span><span class="mut">${n} ligado${n === 1 ? '' : 's'}</span></span>`;
+      b.querySelector('b').textContent = nomeDa(i);
+      b.onclick = () => {
+        conta = i;
+        editando = false;
+        try { localStorage.setItem('sn.conta', String(i)); } catch {}
+        render();
+      };
+      el.appendChild(b);
+    });
+  }
+
+  function render() {
+    if (!cg) return;
+    const cfg = C(), st = sts[conta];
+    abas();
+    $('con').className = 'dot' + (st?.conectado ? ' ok' : '');
+    $('conTxt').textContent = (st?.conectado ? 'Conectado ao jogo' : 'Sem conexão com o jogo (a conta está logada?)') + ' · '
+      + (conta === olheiro ? 'esta conta olha o Mercado para as 4' : `quem olha o Mercado para as 4 é a ${nomeDa(olheiro)}`);
+    $('modo').textContent = cfg.simular ? 'SIMULAÇÃO' : 'COMPRANDO DE VERDADE';
+    $('modo').className = 'modo ' + (cfg.simular ? 'sim' : 'real');
+    $('trocarModo').textContent = cfg.simular ? 'Ligar compra de verdade' : 'Voltar para simulação';
+    if (document.activeElement !== $('intervalo')) $('intervalo').value = cg.intervalo;
+    // Um pedido a cada 4 s no mínimo: com muitas consultas, cada uma volta mais devagar que o intervalo
+    $('ritmo').textContent = nConsultas ? `Agora: ${nConsultas} consulta${nConsultas === 1 ? '' : 's'} (os alvos ligados das 4 contas, sem repetir), cada uma a cada ~${Math.max(cg.intervalo, 4 * nConsultas)} s.` : '';
+    const pausa = sts[olheiro]?.pausadoMercado && cfg.alvos.some(a => ehPk(a) && a.ativo);
+    $('pausa').style.display = pausa ? '' : 'none';
+    $('pausa').textContent = `⏸ Os alvos de pokémon esperam enquanto o Mercado estiver aberto na ${nomeDa(olheiro)}, que olha o Mercado para as 4 (a consulta trocaria a página que você está vendo).`;
+    $('titAlvos').textContent = `Alvos da ${nomeDa(conta)}`;
+    $('titLog').textContent = `Registro da ${nomeDa(conta)}`;
+
+    const u = ultimoItem();
+    $('ultimo').textContent = u ? `Item aberto no Mercado da ${nomeDa(u.conta)}: ${u.nome} (${moedaTxt(u.moeda)})` : 'Abra um item no Mercado (RMT) de qualquer conta para poder adicionar.';
+    $('adicionar').textContent = `+ Adicionar à ${nomeDa(conta)}`;
+    $('adicionar').disabled = !u || cfg.alvos.some(a => !ehPk(a) && a.itemId === u.itemId && a.moeda === u.moeda);
+
+    // As outras contas para copiar (refeito só quando muda: refazer a lista aberta a fecharia)
+    const sel = $('copiarDe');
+    const opcoes = cg.contas.map((c, i) => (i === conta ? null : [i, `${nomeDa(i)} (${c.alvos.length} alvo${c.alvos.length === 1 ? '' : 's'})`])).filter(Boolean);
+    if (sel.dataset.sig !== JSON.stringify(opcoes)) {
+      const antes = sel.value;
+      sel.dataset.sig = JSON.stringify(opcoes);
+      sel.innerHTML = '';
+      for (const [i, txt] of opcoes) { const o = document.createElement('option'); o.value = i; o.textContent = txt; sel.appendChild(o); }
+      if (opcoes.some(([i]) => String(i) === antes)) sel.value = antes;
+    }
+
+    if (!editando) {
+      const tb = $('alvos');
+      tb.innerHTML = '';
+      if (!cfg.alvos.length) tb.innerHTML = '<tr><td colspan="7" class="vazio">Nenhum alvo. Adicione um item ou um pokémon abaixo, ou copie a lista de outra conta.</td></tr>';
+      cfg.alvos.forEach((a, i) => {
+        const vista = st?.ultimaVista?.[chave(a)];
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td class="nome"></td>
+          <td><input type="number" min="1" data-c="precoMax"> <span class="mut">${moedaTxt(a.moeda)}</span></td>
+          <td><input type="number" min="0" data-c="qtdMax" title="0 = sem limite" style="width:64px"></td>
+          <td>${(cfg.comprados?.[chave(a)] || 0)}</td>
+          <td class="mut">${temMenor(vista) ? fmt(vista.menor) + ' <small>' + hora(vista.em) + '</small>' : '—'}</td>
+          <td><input type="checkbox" data-c="ativo"></td>
+          <td><span class="x" title="Tirar da lista">✕</span></td>`;
+        const td = tr.querySelector('.nome');
+        td.innerHTML = `<span class="tag ${ehPk(a) ? 'pk' : 'it'}">${ehPk(a) ? 'POKÉMON' : 'ITEM'}</span><span class="t"></span><small></small>`;
+        // Item: o nome que o jogo mostra agora; o guardado no alvo só enquanto o jogo ainda não deu um
+        const vivo = st?.nomesAlvos?.[a.itemId];
+        td.querySelector('.t').textContent = ehPk(a) ? (a.nome || 'Qualquer pokémon') : (vivo && !/^item \d+$/.test(vivo) ? vivo : a.nome || 'item ' + a.itemId);
+        td.querySelector('small').textContent = ehPk(a) ? (resumoFiltros(a.filtros) || 'sem filtros') : '';
+        tr.querySelector('[data-c=precoMax]').value = a.precoMax;
+        tr.querySelector('[data-c=qtdMax]').value = a.qtdMax;
+        tr.querySelector('[data-c=ativo]').checked = a.ativo;
+        for (const inp of tr.querySelectorAll('input')) {
+          inp.onfocus = () => { editando = true; };
+          inp.onchange = () => {
+            const novo = cfg.alvos.map(x => ({ ...x }));
+            const c = inp.dataset.c;
+            novo[i][c] = c === 'ativo' ? inp.checked : Number(inp.value);
+            editando = false;
+            salvar({ alvos: novo });
+          };
+          inp.onblur = () => { editando = false; };
+        }
+        tr.querySelector('.x').onclick = () => salvar({ alvos: cfg.alvos.filter((_, j) => j !== i) });
+        tb.appendChild(tr);
+      });
+    }
+
+    const ag = st?.agendados ?? [];
+    $('agendados').textContent = ag.length ? '' : 'Nenhum.';
+    for (const x of ag) {
+      const d = document.createElement('div');
+      d.textContent = `${x.item} a ${fmt(x.preco)} — libera às ${hora(x.libera - 0)}`;
+      $('agendados').appendChild(d);
+    }
+
+    const log = $('log');
+    const noFim = log.scrollTop + log.clientHeight >= log.scrollHeight - 5;
+    log.innerHTML = '';
+    for (const l of st?.log ?? []) {
+      const d = document.createElement('div');
+      d.className = /^COMPROU/.test(l.txt) ? 'comprou' : /^\[simulação\]/.test(l.txt) ? 'sim' : '';
+      d.textContent = `${hora(l.em)}  ${l.txt}`;
+      log.appendChild(d);
+    }
+    if (!log.children.length) log.innerHTML = '<span class="mut">Nada ainda.</span>';
+    if (noFim) log.scrollTop = log.scrollHeight;
+  }
+
+  // A lista de espécies para o campo (as que o Monitor de Pokémons já viu no Mercado)
+  function montarEspecies() {
+    const dl = $('lista-especies');
+    if (dl.dataset.n === String(Object.keys(especies).length)) return;
+    dl.dataset.n = String(Object.keys(especies).length);
+    dl.innerHTML = '';
+    for (const n of [...new Set(Object.values(especies))].sort((a, b) => a.localeCompare(b))) {
+      const o = document.createElement('option'); o.value = n; dl.appendChild(o);
+    }
+  }
+  const especiePorNome = n => {
+    const alvo = String(n || '').trim().toLowerCase();
+    if (!alvo) return 0;
+    const e = Object.entries(especies).find(([, nome]) => String(nome).toLowerCase() === alvo);
+    return e ? Number(e[0]) : null;
+  };
+
+  $('pk-add').onclick = () => {
+    const nomeDigitado = $('pk-especie').value.trim();
+    const especie = especiePorNome(nomeDigitado);
+    if (especie === null) return alert('Espécie não encontrada. Escolha uma da lista (as que o Monitor de Pokémons já viu no Mercado), ou deixe vazio para qualquer pokémon.');
+    const preco = Number($('pk-preco').value);
+    if (!(preco > 0)) return alert('Coloque o preço máximo.');
+    const v = id => $(id).value;
+    const alvo = {
+      tipo: 'pokemon', especie, nome: especie ? especies[especie] : 'Qualquer pokémon', moeda: v('pk-moeda'), precoMax: preco, qtdMax: Number(v('pk-qtd')) || 0, ativo: false,
+      filtros: { notaMin: v('pk-notaMin'), nivelMin: v('pk-nivelMin'), ivMin: v('pk-ivMin'), qualidadeMin: v('pk-qualidadeMin'), potenciaMin: v('pk-potenciaMin'), shiny: v('pk-shiny') }
+    };
+    if (!especie && !confirm(`Comprar QUALQUER pokémon a até ${fmt(preco)} ${moedaTxt(alvo.moeda)}${resumoFiltros(alvo.filtros) ? ' (' + resumoFiltros(alvo.filtros) + ')' : ''} na ${nomeDa(conta)}?\n\nEle entra DESLIGADO na lista; ligue quando conferir.`)) return;
+    salvar({ alvos: [...C().alvos, alvo] });
+    for (const id of ['pk-especie', 'pk-preco', 'pk-notaMin', 'pk-nivelMin', 'pk-ivMin', 'pk-qualidadeMin', 'pk-potenciaMin']) $(id).value = '';
+  };
+  $('adicionar').onclick = () => {
+    const u = ultimoItem();
+    if (!u) return;
+    // O menor preço que a conta onde o item foi aberto viu (ou esta, se ela também viu)
+    const k = u.itemId + ':' + u.moeda, vista = [sts[u.conta]?.ultimaVista?.[k], sts[conta]?.ultimaVista?.[k]].find(temMenor);
+    salvar({ alvos: [...C().alvos, { tipo: 'item', itemId: u.itemId, nome: u.nome, moeda: u.moeda, precoMax: vista ? vista.menor : 1, qtdMax: 0, ativo: false }] });
+  };
+  $('copiar').onclick = () => {
+    const de = Number($('copiarDe').value);
+    if (!cg.contas[de]) return;
+    const novos = cg.contas[de].alvos.filter(a => !C().alvos.some(b => igual(a, b)));
+    if (!novos.length) return alert(`A ${nomeDa(conta)} já tem todos os alvos da ${nomeDa(de)}.`);
+    const ligados = novos.filter(a => a.ativo).length;
+    const aviso = C().simular
+      ? `A ${nomeDa(conta)} está em SIMULAÇÃO: só anota o que compraria.`
+      : ligados ? `A ${nomeDa(conta)} está COMPRANDO DE VERDADE: ${ligados === 1 ? 'o alvo ligado começa' : `os ${ligados} alvos ligados começam`} a comprar com as gemas e coins dela.` : 'Eles entram desligados.';
+    if (!confirm(`Copiar ${novos.length} alvo${novos.length === 1 ? '' : 's'} da ${nomeDa(de)} para a ${nomeDa(conta)}?\n\n${aviso}`)) return;
+    // Pokémon copiado ganha contagem própria (o app dá um uid novo)
+    salvar({ alvos: [...C().alvos, ...novos.map(a => (ehPk(a) ? { ...a, uid: '' } : a))] });
+  };
+  $('trocarModo').onclick = () => {
+    if (C().simular && !confirm(`Ligar a compra de verdade na ${nomeDa(conta)}?\n\nO sniper vai gastar gemas/coins DESTA conta comprando os alvos ligados dela, até o preço máximo e a quantidade de cada um.`)) return;
+    salvar({ simular: !C().simular });
+  };
+  $('intervalo').onchange = () => api.snSalvar({ intervalo: Number($('intervalo').value) });
+  $('zerar').onclick = () => { if (confirm(`Zerar a contagem de comprados da ${nomeDa(conta)}?`)) salvar({ zerar: true }); };
+
+  api.onSnState(s => {
+    sts = s.sts || []; cg = s.cfg; nomes = s.nomes || []; olheiro = s.olheiro ?? 0; nConsultas = s.consultas || 0; especies = s.especies || {};
+    montarEspecies();
+    render();
+  });
+</script>
+</body>
+</html>

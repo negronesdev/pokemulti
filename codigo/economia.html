@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Economia do RMT</title>
+<style>
+  :root { --bg:#151515; --box:#1f1f23; --linha:#2a2a30; --fg:#eee; --mut:#9a9a9a; --sobe:#3fb950; --desce:#f0544f; --gema:#e879f9; --coin:#f5c518; --op:#22d3ee; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:13px system-ui, "Segoe UI", sans-serif; }
+  body { display:flex; flex-direction:column; }
+  header { display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid var(--linha); flex-wrap:wrap; }
+  .mut { color:var(--mut); font-size:12px; }
+  .sp { flex:1; }
+  button { height:28px; padding:0 10px; border-radius:6px; border:1px solid #3a3a42; background:#26262c; color:var(--fg); cursor:pointer; font:inherit; }
+  button:hover { background:#32323a; }
+  .abas { display:flex; gap:4px; padding:8px 12px 0; border-bottom:1px solid var(--linha); flex-wrap:wrap; }
+  .abas button { border-radius:6px 6px 0 0; border-bottom:0; }
+  .abas button.on { background:#6b3fd6; border-color:#6b3fd6; }
+  main { flex:1; overflow-y:auto; padding:14px; }
+  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--mut); margin:18px 0 6px; }
+  h2:first-child { margin-top:0; }
+  .cards { display:flex; gap:10px; flex-wrap:wrap; }
+  .card { background:var(--box); border:1px solid var(--linha); border-radius:10px; padding:10px 12px; min-width:200px; flex:1; }
+  .card b.grande { display:block; font-size:22px; margin:4px 0; font-variant-numeric:tabular-nums; }
+  .card.destaque { border-color:#6b3fd6; }
+  table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
+  th { text-align:left; font-size:11px; color:var(--mut); font-weight:600; padding:5px 6px; position:sticky; top:-14px; background:var(--bg); }
+  td { padding:5px 6px; border-top:1px solid var(--linha); }
+  td.r, th.r { text-align:right; }
+  .bom { color:var(--sobe); font-weight:700; } .ruim { color:var(--desce); } .neutro { color:var(--mut); }
+  .tag { font-size:10px; font-weight:700; padding:1px 5px; border-radius:4px; }
+  .tag.it { background:#2a3a20; color:#9be36b; } .tag.pk { background:#3a2240; color:#c792ff; }
+  .gema { color:var(--gema); } .coin { color:var(--coin); }
+  /* O desenho da gema ocupa só o miolo do quadro de 32 px, então o ícone fica maior que a letra (como no jogo) */
+  .ic-gema { width:1.45em; height:1.45em; vertical-align:-0.38em; margin:0 -0.1em; image-rendering:pixelated; }
+  .ic-ouro { width:1.05em; height:1.05em; vertical-align:-0.16em; image-rendering:pixelated; }
+  .nota { background:#1a2430; border:1px solid #23415a; border-radius:8px; padding:10px 12px; line-height:1.55; margin:8px 0; }
+  .nota b { color:#fff; }
+  .dica { background:var(--box); border-left:3px solid var(--op); border-radius:6px; padding:8px 12px; margin:6px 0; line-height:1.5; }
+  .filtro { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:6px; }
+  input[type=number] { width:80px; height:26px; background:#000; color:#fff; border:1px solid #444; border-radius:5px; padding:0 6px; font:inherit; }
+  .barra { height:6px; background:#2a2a30; border-radius:3px; overflow:hidden; min-width:60px; }
+  .barra i { display:block; height:100%; background:var(--op); }
+  details.porque { margin-top:14px; background:var(--box); border:1px solid var(--linha); border-radius:8px; padding:8px 12px; }
+  details.porque summary { cursor:pointer; color:var(--mut); }
+  details.porque[open] summary { margin-bottom:8px; }
+  details.porque p { line-height:1.55; margin:0 0 8px; }
+</style>
+</head>
+<body>
+<header>
+  <b>💰 Economia do RMT</b>
+  <span class="mut" id="info"></span>
+  <span class="sp"></span>
+  <span class="mut">Tudo calculado com os dados que o app já coleta — nenhuma consulta a mais ao jogo.</span>
+</header>
+<div class="abas" id="abas">
+  <button data-a="cotacao" class="on">Cotação</button>
+  <button data-a="g2c">Gemas → Coins</button>
+  <button data-a="c2g">Coins → Gemas</button>
+  <button data-a="ciclo">Ciclos</button>
+  <button data-a="flip">Flips</button>
+  <button data-a="dicas">Dicas</button>
+</div>
+<main id="corpo"></main>
+<script>
+  // ---- As TAXAS do jogo (shared/taxa-mercado.mjs): coins 15% em tudo; gemas 15% em item e diamante;
+  // pokemon em gemas por FAIXA marginal (13% até 500, 10% de 501 a 5.000, 7,5% acima), arredondada para cima.
+  const TAXA_COIN = 0.15;
+  const liquidoCoin = p => Math.floor(p * (1 - TAXA_COIN));
+  const liquidoGemaItem = p => p - Math.min(p, Math.ceil(Math.floor(p) * 1500 / 10000));
+  const liquidoGemaPk = p => {
+    const t = Math.floor(p); let piso = 0, bp = 0;
+    for (const [ate, b] of [[500, 1300], [5000, 1000], [Infinity, 750]]) { const teto = Math.min(t, ate); if (teto <= piso) break; bp += (teto - piso) * b; piso = teto; }
+    return t - Math.min(t, Math.ceil(bp / 10000));
+  };
+  const USD_POR_GEMA = 0.009; // saque: 1.000 gemas = 9 USDT (Termos, seção 10)
+
+  let D = null, aba = 'cotacao';
+  try { aba = localStorage.getItem('ec-aba') || 'cotacao'; } catch {}
+  const $ = id => document.getElementById(id);
+  const fmt = v => {
+    if (v == null || !isFinite(v)) return '—';
+    const a = Math.abs(v);
+    for (const [lim, div, s] of [[1e12, 1e12, 'T'], [1e9, 1e9, 'B'], [1e6, 1e6, 'M'], [1e4, 1e3, 'K']]) if (a >= lim) return (v / div).toLocaleString('pt-BR', { maximumFractionDigits: v / div >= 100 ? 0 : v / div >= 10 ? 1 : 2 }) + s;
+    return (Math.abs(v) < 10 && v % 1 ? v.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : Math.round(v).toLocaleString('pt-BR'));
+  };
+  const mediana = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), k = s.length >> 1; return s.length % 2 ? s[k] : (s[k - 1] + s[k]) / 2; };
+  const medianaPesada = pares => { // [{v, p}]
+    const s = pares.filter(x => isFinite(x.v) && x.p > 0).sort((a, b) => a.v - b.v);
+    const tot = s.reduce((t, x) => t + x.p, 0); let acc = 0;
+    for (const x of s) { acc += x.p; if (acc >= tot / 2) return x.v; }
+    return null;
+  };
+  const pct = v => (v == null || !isFinite(v) ? '—' : (v > 0 ? '+' : '') + Math.round(v).toLocaleString('pt-BR') + '%');
+  const ehStone = n => /\bstone$/i.test(n || '');
+  const nomeIt = id => D.precos.nomes?.[id] || ('item ' + id);
+  const nomePk = id => D.pk.especies?.[id] || ('#' + id);
+
+  // ---------------------------------------------------------------- o modelo
+  // Itens (verificação de agora): [menorGema, menorCoin, anuncios, mediaGema7d, unidGema7d, mediaCoin7d, unidCoin7d]
+  // Vendas de pokemon: [id, em, especie, preco, moeda(0 coin,1 gema), nota, nivel, shiny, potencia, iv, q, tm]
+  // Grade de pokemon: especie -> [anuncios, menorCoin, menorGema, shinys]
+  function montar() {
+    const itens = Object.entries(D.precos.atual?.itens ?? {}).map(([id, l]) => ({
+      id: Number(id), nome: nomeIt(id), stone: ehStone(nomeIt(id)),
+      minG: l[0], minC: l[1], anuncios: l[2] ?? 0, medG: l[3], uniG: l[4] ?? 0, medC: l[5], uniC: l[6] ?? 0
+    }));
+    // Pokemon: só NÃO shiny e nota até 3,8 (o grosso do mercado; o barato da vitrine também é dessa faixa),
+    // vendas dos últimos 7 dias, mediana por espécie e moeda
+    const corte = Date.now() - 7 * 864e5, por = {};
+    for (const v of D.pk.vendas ?? []) {
+      if (v[1] < corte || v[7] || v[14] || v[5] == null || v[5] > 3.8 || !(v[3] > 0)) continue; // [14]: transferência entre contas
+      const e = (por[v[2]] ??= { g: [], c: [] });
+      (v[4] ? e.g : e.c).push(v[3]);
+    }
+    const grade = D.pk.gradeAtual?.esp ?? {};
+    const pks = Object.entries(por).map(([id, e]) => ({
+      id: Number(id), nome: nomePk(id), medG: mediana(e.g), medC: mediana(e.c), uniG: e.g.length, uniC: e.c.length,
+      minC: grade[id]?.[1] ?? null, minG: grade[id]?.[2] ?? null, anuncios: grade[id]?.[0] ?? 0
+    }));
+    // A COTAÇÃO por grupo: a mediana ponderada (pelo volume que dá para trocar nas duas pontas) do
+    // "1 gema = X coins" implícito em cada produto vendido nas duas moedas
+    const rItens = itens.filter(i => !i.stone && i.medG && i.medC && i.uniG >= 20 && i.uniC >= 5).map(i => ({ v: i.medC / i.medG, p: Math.min(i.uniG, i.uniC * 50) }));
+    const rStone = itens.filter(i => i.stone && i.medG && i.medC && i.uniG >= 20 && i.uniC >= 5).map(i => ({ v: i.medC / i.medG, p: Math.min(i.uniG, i.uniC) }));
+    const rPk = pks.filter(p => p.uniG >= 3 && p.uniC >= 3).map(p => ({ v: p.medC / p.medG, p: Math.min(p.uniG, p.uniC) }));
+    const cot = { itens: medianaPesada(rItens), stone: medianaPesada(rStone), pk: medianaPesada(rPk), nItens: rItens.length, nStone: rStone.length, nPk: rPk.length };
+    // A de REFERÊNCIA é a dos itens de alto valor (o maior volume nas duas moedas); sem ela, a dos pokemon
+    cot.ref = cot.itens ?? cot.pk;
+    return { itens, pks, cot };
+  }
+
+  // ---- PREÇOS REALISTAS (conservadores). O menor anúncio às vezes é isca ou retido (uma stone a 2 coins
+  // com média de 95 mil): ninguém compra ali — fica retido e vai a sorteio. E a média de venda, sozinha,
+  // engana na hora de VENDER: se a concorrência anuncia a 2 gemas, não se vende a 53.
+  //   COMPRA: o menor anúncio, se não for suspeito (abaixo de metade da média); senão, a média.
+  //   VENDA (trocando de moeda, venda já): o menor entre a média e o anúncio mais barato da concorrência.
+  const suspeito = (min, med) => min != null && med != null && min < med * 0.5;
+  const precoCompra = (min, med) => (min != null && !suspeito(min, med) ? min : med ?? null);
+  const precoVenda = (min, med) => (med == null ? null : min != null ? Math.min(med, min) : med);
+  const AVISO_SUSP = ' <span class="mut" title="O menor anúncio estava abaixo da metade da média (isca ou retido): a conta usou a média">⚠</span>';
+
+  // As STONES ficam fora das rotas com gemas (27/10/2026, conferido com o histórico do Monitor de Preços a pedido
+  // do usuário): em gemas toda stone fica no menor preço que o jogo aceita (2 gemas) em todas as leituras desde
+  // 23/10 — há mais gente querendo vender stone em gemas do que comprando, e a fila de anúncios só cresce —, e a
+  // venda avulsa a 2 gemas paga 1 de taxa (50%). Para quem compra, 2 gemas numa stone de milhares de coins não
+  // compensa. A conta "vende já a 2 gemas" punha as stones no topo de Coins → Gemas com +20.000% que não saem do
+  // papel. O porquê, com os números de agora, fica no fim das duas abas (`stonesFora`).
+  const PISO_GEMA = 2; // PRECO_MIN_ORB do jogo
+
+  // Gemas → Coins: compro com gema e vendo em coins (líquido)
+  function rotasG2C(M) {
+    const out = [];
+    const add = (tipo, x) => {
+      const cg = precoCompra(x.minG, x.medG), vc = precoVenda(x.minC, x.medC);
+      if (!cg || !vc || x.uniC < 3) return;
+      const liq = liquidoCoin(vc);
+      out.push({ tipo, nome: x.nome, custoG: cg, vendeC: vc, liq, cpg: liq / cg, volume: x.uniC, anunc: x.anuncios, suspG: suspeito(x.minG, x.medG) });
+    };
+    for (const i of M.itens) if (!i.stone) add('it', i);
+    for (const p of M.pks) add('pk', p);
+    return out.filter(r => r.liq > 0).sort((a, b) => b.cpg - a.cpg);
+  }
+  // Coins → Gemas: compro com coin e vendo em gemas (líquido)
+  function rotasC2G(M) {
+    const out = [];
+    const add = (tipo, x, liqG) => {
+      const cc = precoCompra(x.minC, x.medC), vg = precoVenda(x.minG, x.medG);
+      if (!cc || !vg || x.uniG < 3) return;
+      const liq = liqG(vg);
+      out.push({ tipo, nome: x.nome, custoC: cc, vendeG: vg, liq, gpm: liq / cc * 1e6, volume: x.uniG, anunc: x.anuncios, suspC: suspeito(x.minC, x.medC) });
+    };
+    for (const i of M.itens) if (!i.stone) add('it', i, liquidoGemaItem);
+    for (const p of M.pks) add('pk', p, liquidoGemaPk);
+    return out.filter(r => r.liq > 0).sort((a, b) => b.gpm - a.gpm);
+  }
+
+  // O porquê das stones fora das rotas com gemas, com os números de agora e os do 1º dia do diário (até 8 dias)
+  let porqueAberto = false;
+  function stonesFora(M) {
+    const st = M.itens.filter(i => i.stone).sort((a, b) => b.uniG - a.uniG);
+    if (!st.length) return '';
+    const di = D.precos.diario ?? {}, dias = Object.keys(di).sort(), d0 = dias.length > 1 ? dias[0] : null;
+    const dm = d => `${d.slice(8)}/${d.slice(5, 7)}`;
+    // No diário, por item: [.., 3 = o maior "menor anúncio em gemas" do dia, .., 9 = vendidas em gemas 7d, .., 12 = anúncios]
+    const doDia0 = (id, col) => (d0 ? di[d0]?.[id]?.[col] ?? null : null);
+    const noPiso = st.filter(i => i.minG != null && i.minG <= PISO_GEMA && dias.every(d => (di[d]?.[i.id]?.[3] ?? PISO_GEMA) <= PISO_GEMA)).length;
+    const tot = st.reduce((s, i) => ({ g: s.g + i.uniG, a: s.a + i.anuncios, a0: s.a0 + (doDia0(i.id, 12) ?? i.anuncios) }), { g: 0, a: 0, a0: 0 });
+    const top = st.slice(0, 4).filter(i => i.uniG > 0), fatiaTop = tot.g ? top.reduce((s, i) => s + i.uniG, 0) / tot.g * 100 : 0;
+    const comAntes = (v, a) => (a == null || a === v ? fmt(v) : `${fmt(v)} ${v > a ? '↑' : '↓'} <span class="mut">(${fmt(a)} em ${dm(d0)})</span>`);
+    const todas = noPiso === st.length;
+    let h = `<details class="porque"${porqueAberto ? ' open' : ''}><summary>Por que as stones ficam de fora: ${todas ? `as ${st.length} estão` : `${noPiso} de ${st.length} estão`} no preço mínimo em gemas${d0 ? ` desde ${dm(d0)}` : ''}</summary>
+      <p><b>${todas ? `As ${st.length} stones estão` : `${noPiso} das ${st.length} stones estão`} no menor preço que o jogo aceita em gemas (${PISO_GEMA} ${GEMA})${d0 ? `, em todas as leituras desde ${dm(d0)}` : ''}.</b>
+        Preço no piso quer dizer que há mais gente querendo vender stone em gemas do que comprando: quem anuncia agora entra no fim da fila, a ${PISO_GEMA} ${GEMA}${d0 && tot.a0 !== tot.a ? `, e os anúncios das stones foram de ${fmt(tot.a0)} para ${fmt(tot.a)} desde ${dm(d0)}` : ''}.
+        As vendas em gemas somam ~${fmt(tot.g / 7)} por dia${top.length ? `, ${Math.round(fatiaTop)}% delas de ${top.map(i => i.nome.replace(/ Stone$/, '')).join(', ')}` : ''}. Uma unidade vendida sozinha a ${PISO_GEMA} ${GEMA} paga 1 ${GEMA} de taxa (50%).</p>
+      <p>Para quem compra também não compensa: ${M.cot.ref ? `${PISO_GEMA} ${GEMA} valem ~${fmt(PISO_GEMA * M.cot.ref)} ${OURO} pela cotação de referência, e a stone sai por milhares em coins` : `a stone sai por milhares em coins, e ${PISO_GEMA} ${GEMA} valem muito mais que isso`}.
+        Por isso as stones ficam fora de Gemas → Coins, de Coins → Gemas e dos Ciclos. Em coins elas continuam nos Flips.</p>
+      <table><tr><th>Stone</th><th class="r">Menor em gemas</th><th class="r">Vendidas em gemas (7d)</th><th class="r">Por dia</th><th class="r">Anúncios (gemas e coins)</th><th class="r">Vendidas em coins (7d)</th></tr>`;
+    for (const i of st) {
+      h += `<tr><td>${tagDe('it')} ${i.nome}</td><td class="r gema">${fmt(i.minG)}</td><td class="r">${comAntes(i.uniG, doDia0(i.id, 9))}</td><td class="r">${fmt(i.uniG / 7)}</td>
+        <td class="r">${comAntes(i.anuncios, doDia0(i.id, 12))}</td><td class="r coin">${fmt(i.uniC)}</td></tr>`;
+    }
+    return h + '</table></details>';
+  }
+
+  const tagDe = t => `<span class="tag ${t}">${t === 'pk' ? 'POKÉMON' : 'ITEM'}</span>`;
+  // Gema e ouro com desenho próprio (edição de venda: sem arte do jogo). O 💎 azul, no jogo,
+  // é o DIAMANTE — outra moeda; e o emoji 🪙 nem existe no Windows 10 (aparecia um quadrado).
+  const GEMA = '<img class="ic-gema" src="gema.png" alt="gemas">';
+  const OURO = '<img class="ic-ouro" src="ouro.png" alt="coins">';
+  const liquidez = (vol, max) => `<div class="barra" title="${vol} vendidos em 7 dias"><i style="width:${Math.min(100, Math.round(Math.sqrt(vol / Math.max(1, max)) * 100))}%"></i></div>`;
+
+  function render() {
+    for (const b of $('abas').children) b.classList.toggle('on', b.dataset.a === aba);
+    if (!D) return;
+    const M = montar();
+    const reg = D.precos.atual?.em;
+    $('info').textContent = (reg ? `preços dos itens de ${new Date(reg).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'sem verificação de itens ainda') + ` · ${(D.pk.vendas?.length ?? 0).toLocaleString('pt-BR')} vendas de pokémon`;
+    $('corpo').innerHTML = ({ cotacao, g2c, c2g, ciclo, flip, dicas })[aba](M);
+    for (const el of $('corpo').querySelectorAll('[data-filtro]')) el.onchange = () => { filtros[el.dataset.filtro] = Number(el.value) || 0; try { localStorage.setItem('ec-filtros', JSON.stringify(filtros)); } catch {} render(); };
+    $('corpo').querySelector('details.porque')?.addEventListener('toggle', e => { porqueAberto = e.target.open; });
+  }
+  const filtros = { volMin: 10 };
+  try { Object.assign(filtros, JSON.parse(localStorage.getItem('ec-filtros') || '{}')); } catch {}
+  const filtroVolume = () => `<div class="filtro"><span class="mut">Só com pelo menos</span><input type="number" data-filtro="volMin" value="${filtros.volMin}"><span class="mut">vendas na moeda de saída em 7 dias (liquidez: é o que garante que dá para vender)</span></div>`;
+
+  function cotacao(M) {
+    const c = M.cot;
+    const card = (titulo, v, n, sub, cls = '') => `<div class="card ${cls}"><span class="mut">${titulo}</span><b class="grande">${v ? '1 ' + GEMA + ' = ' + fmt(v) + ' ' + OURO : '—'}</b><span class="mut">${sub} · ${n} produtos</span></div>`;
+    let h = `<h2>Quanto vale 1 gema em coins</h2><div class="cards">
+      ${card('Itens de alto valor (tokens, fragmentos, tickets)', c.itens, c.nItens, 'a cotação de referência', 'destaque')}
+      ${card('Pokémons (N até 3,8, sem shiny)', c.pk, c.nPk, 'mediana das espécies')}
+      ${card('Stones', c.stone, c.nStone, 'mercado à parte')}
+    </div>`;
+    if (c.ref) {
+      const coinsPorDolar = c.ref / USD_POR_GEMA;
+      h += `<div class="cards" style="margin-top:10px">
+        <div class="card"><span class="mut">1 milhão de coins vale</span><b class="grande">${fmt(1e6 / c.ref)} ${GEMA}</b><span class="mut">≈ US$ ${(1e6 / c.ref * USD_POR_GEMA).toLocaleString('pt-BR', { maximumFractionDigits: 4 })} pelo saque</span></div>
+        <div class="card"><span class="mut">1 bilhão de coins vale</span><b class="grande">${fmt(1e9 / c.ref)} ${GEMA}</b><span class="mut">≈ US$ ${(1e9 / c.ref * USD_POR_GEMA).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</span></div>
+        <div class="card"><span class="mut">US$ 1 em coins</span><b class="grande">${fmt(coinsPorDolar)} ${OURO}</b><span class="mut">111 gemas pela cotação de referência</span></div>
+      </div>`;
+    }
+    h += `<div class="nota">O jogo tem <b>mercados separados</b>: a mesma gema "vale" valores muito diferentes conforme o produto. Nos itens de alto valor e nos pokémons ela vale <b>milhões</b> de coins; nas stones, só <b>milhares</b>. Nas stones essa diferença não sai do papel: em gemas elas ficam no preço mínimo, com fila (o porquê está no fim de <b>Coins → Gemas</b>). Entre os outros produtos, veja <b>Coins → Gemas</b>, <b>Gemas → Coins</b> e <b>Ciclos</b>.<br>
+      Cada cotação é a <b>mediana ponderada pelo volume</b> do "1 gema = X coins" de cada produto vendido nas duas moedas nos últimos 7 dias (média de venda real, não anúncio).</div>`;
+    // Por produto
+    const linhas = [
+      ...M.itens.filter(i => i.medG && i.medC && i.uniG >= 5 && i.uniC >= 3).map(i => ({ t: 'it', nome: i.nome + (i.stone ? ' ·stone' : ''), g: i.medG, c: i.medC, ug: i.uniG, uc: i.uniC })),
+      ...M.pks.filter(p => p.uniG >= 3 && p.uniC >= 3).map(p => ({ t: 'pk', nome: p.nome, g: p.medG, c: p.medC, ug: p.uniG, uc: p.uniC }))
+    ].map(l => ({ ...l, taxa: l.c / l.g })).sort((a, b) => b.taxa - a.taxa);
+    h += `<h2>Por produto (vendido nas duas moedas, 7 dias)</h2><table><tr><th>Produto</th><th class="r">Média em gemas</th><th class="r">Média em coins</th><th class="r">1 gema =</th><th class="r">vs referência</th><th class="r">Vendas ${GEMA} / ${OURO}</th></tr>`;
+    for (const l of linhas) {
+      const vs = c.ref ? (l.taxa / c.ref - 1) * 100 : null;
+      h += `<tr><td>${tagDe(l.t)} ${l.nome}</td><td class="r gema">${fmt(l.g)}</td><td class="r coin">${fmt(l.c)}</td><td class="r"><b>${fmt(l.taxa)}</b></td><td class="r ${vs == null ? '' : vs > 0 ? 'bom' : 'ruim'}" title="${vs > 0 ? 'Em coins está CARO (ou em gemas barato): bom para VENDER em coins / comprar em gemas' : 'Em coins está BARATO (ou em gemas caro): bom para COMPRAR em coins / vender em gemas'}">${pct(vs)}</td><td class="r mut">${l.ug} / ${l.uc}</td></tr>`;
+    }
+    return h + '</table>';
+  }
+
+  function g2c(M) {
+    const ref = M.cot.ref;
+    const r = rotasG2C(M).filter(x => x.volume >= filtros.volMin);
+    const maxV = Math.max(1, ...r.map(x => x.volume));
+    let h = `<h2>Transformar gemas em coins — o que comprar com gemas e vender em coins</h2>
+      <div class="nota">Compra com gemas e vende em coins, já <b>descontados os 15%</b> da venda em coins. <b>Compra</b> = menor anúncio em gemas (ou a média, se o anúncio for suspeito de isca ⚠). <b>Vende</b> = o menor entre a média de venda e o anúncio mais barato em coins (para vender já, é preciso competir com ele). "Coins por gema" é quanto cada gema gasta vira em coins. Quanto maior, melhor${ref ? ` — compare com a cotação de referência (${fmt(ref)})` : ''}. As stones ficam de fora: o porquê está no fim da lista.</div>${filtroVolume()}`;
+    h += '<table><tr><th>Produto</th><th class="r">Compra a</th><th class="r">Vende a</th><th class="r">Líquido</th><th class="r">Coins por gema</th><th class="r">vs cotação</th><th>Liquidez (7d)</th><th class="r">Anúncios</th></tr>';
+    for (const x of r.slice(0, 60)) {
+      const vs = ref ? (x.cpg / ref - 1) * 100 : null;
+      h += `<tr><td>${tagDe(x.tipo)} ${x.nome}${x.suspG ? AVISO_SUSP : ''}</td><td class="r gema">${fmt(x.custoG)} ${GEMA}</td><td class="r coin">${fmt(x.vendeC)}</td><td class="r coin">${fmt(x.liq)}</td><td class="r"><b>${fmt(x.cpg)}</b></td><td class="r ${vs > 0 ? 'bom' : 'ruim'}">${pct(vs)}</td><td>${liquidez(x.volume, maxV)}</td><td class="r mut">${x.anunc || '—'}</td></tr>`;
+    }
+    return h + '</table>' + (r.length ? '' : '<div class="mut">Nada com essa liquidez. Baixe o filtro.</div>') + stonesFora(M);
+  }
+
+  function c2g(M) {
+    const ref = M.cot.ref;
+    const r = rotasC2G(M).filter(x => x.volume >= filtros.volMin);
+    const maxV = Math.max(1, ...r.map(x => x.volume));
+    let h = `<h2>Transformar coins em gemas — o que comprar com coins e vender em gemas</h2>
+      <div class="nota">Compra com coins e vende em gemas, já <b>descontada a taxa em gemas</b> (15% em item; faixa de 13% → 7,5% em pokémon). <b>Compra</b> = menor anúncio em coins (ou a média, se o anúncio for suspeito de isca ⚠). <b>Vende</b> = o menor entre a média de venda e o anúncio mais barato em gemas. "Gemas por 1M de coins" é quanto cada milhão gasto vira em gemas.${ref ? ` Pela cotação de referência, 1M de coins = ${fmt(1e6 / ref)} gemas: acima disso a rota rende mais que a cotação.` : ''} As stones ficam de fora: o porquê está no fim da lista.</div>${filtroVolume()}`;
+    h += `<table><tr><th>Produto</th><th class="r">Compra a</th><th class="r">Vende a</th><th class="r">Líquido</th><th class="r">Gemas por 1M ${OURO}</th><th class="r">vs cotação</th><th>Liquidez (7d)</th><th class="r">Anúncios</th></tr>`;
+    for (const x of r.slice(0, 60)) {
+      const vs = ref ? (x.gpm / (1e6 / ref) - 1) * 100 : null;
+      h += `<tr><td>${tagDe(x.tipo)} ${x.nome}${x.suspC ? AVISO_SUSP : ''}</td><td class="r coin">${fmt(x.custoC)} ${OURO}</td><td class="r gema">${fmt(x.vendeG)}</td><td class="r gema">${fmt(x.liq)}</td><td class="r"><b>${fmt(x.gpm)}</b></td><td class="r ${vs > 0 ? 'bom' : 'ruim'}">${pct(vs)}</td><td>${liquidez(x.volume, maxV)}</td><td class="r mut">${x.anunc || '—'}</td></tr>`;
+    }
+    return h + '</table>' + (r.length ? '' : '<div class="mut">Nada com essa liquidez. Baixe o filtro.</div>') + stonesFora(M);
+  }
+
+  function calcCiclos(M) {
+    const ida = rotasC2G(M).filter(x => x.volume >= filtros.volMin).slice(0, 12);
+    const volta = rotasG2C(M).filter(x => x.volume >= filtros.volMin).slice(0, 12);
+    const ciclos = [];
+    // Teto realista: você consegue ~10% do que o mercado vende por dia em cada lado (há concorrência).
+    // Gemas/dia que a ida gera e que a volta absorve; o menor dos dois limita o lucro diário.
+    const FATIA = 0.1;
+    for (const a of ida) for (const b of volta) {
+      const gemasDia = Math.min(FATIA * a.volume / 7 * a.liq, FATIA * b.volume / 7 * b.custoG);
+      const mult = a.gpm / 1e6 * b.cpg;
+      ciclos.push({ a, b, mult, gargalo: Math.min(a.volume, b.volume), lucroDia: gemasDia * (b.cpg - 1e6 / a.gpm) });
+    }
+    return ciclos.sort((x, y) => y.lucroDia - x.lucroDia);
+  }
+
+  function ciclo(M) {
+    const ciclos = calcCiclos(M);
+    const maxV = Math.max(1, ...ciclos.map(c => c.gargalo));
+    let h = `<h2>Ciclos: coins → gemas → coins</h2>
+      <div class="nota">Junta a melhor <b>ida</b> (comprar com coins e vender em gemas) com a melhor <b>volta</b> (comprar com gemas e vender em coins). <b>Multiplicador</b> = quantos coins voltam para cada coin investido, com as duas taxas descontadas. <b>Lucro/dia</b> = estimativa se você conseguir vender ~10% do que o mercado vende por dia em cada lado (há concorrência): é o número que manda, por isso a lista vem ordenada por ele. Multiplicador alto com pouco volume rende pouco.<br>
+      Comece <b>pequeno</b>: compre e venda algumas unidades, confira se vendeu pelo preço, e só então aumente. As stones ficam de fora (o porquê está no fim de Coins → Gemas).</div>${filtroVolume()}`;
+    h += `<table><tr><th>Ida (compra em ${OURO} → vende em ${GEMA})</th><th>Volta (compra em ${GEMA} → vende em ${OURO})</th><th class="r">Multiplicador</th><th class="r">1M ${OURO} vira</th><th class="r">Lucro/dia ~</th><th>Gargalo (vendas 7d)</th></tr>`;
+    for (const c of ciclos.slice(0, 40)) {
+      h += `<tr><td>${tagDe(c.a.tipo)} ${c.a.nome} <span class="mut">(${fmt(c.a.custoC)} → ${fmt(c.a.liq)} ${GEMA})</span></td><td>${tagDe(c.b.tipo)} ${c.b.nome} <span class="mut">(${fmt(c.b.custoG)} ${GEMA} → ${fmt(c.b.liq)})</span></td>
+        <td class="r ${c.mult > 1 ? 'bom' : 'ruim'}"><b>×${c.mult.toLocaleString('pt-BR', { maximumFractionDigits: c.mult >= 10 ? 0 : 2 })}</b>${c.mult > 1000 ? ' <span title="Bom demais: confira no jogo os anúncios e as vendas antes de investir — pode ser poucos dados ou preço fora da curva">⚠ confira</span>' : ''}</td><td class="r coin">${fmt(c.mult * 1e6)}</td><td class="r ${c.lucroDia > 0 ? 'bom' : 'ruim'}">${fmt(c.lucroDia)} ${OURO}</td><td>${liquidez(c.gargalo, maxV)} <span class="mut">${c.gargalo}</span></td></tr>`;
+    }
+    return h + '</table>' + (ciclos.length ? '' : '<div class="mut">Sem dados suficientes ainda.</div>');
+  }
+
+  function flip(M) {
+    // Compra no menor anúncio (só se não for suspeito de isca/retido) e revende pela média (com paciência)
+    const out = [];
+    const add = (tipo, x, moeda, liqDe, volMin) => {
+      const min = moeda === 'c' ? x.minC : x.minG, med = moeda === 'c' ? x.medC : x.medG, vol = moeda === 'c' ? x.uniC : x.uniG;
+      if (!min || !med || vol < volMin || suspeito(min, med)) return;
+      const lq = liqDe(med);
+      out.push({ tipo, nome: x.nome, moeda, custo: min, vende: med, liq: lq, lucro: lq - min, margem: (lq / min - 1) * 100, volume: vol });
+    };
+    for (const i of M.itens) { add('it', i, 'c', liquidoCoin, filtros.volMin); if (!i.stone) add('it', i, 'g', liquidoGemaItem, filtros.volMin); }
+    for (const p of M.pks) { add('pk', p, 'c', liquidoCoin, Math.min(filtros.volMin, 5)); add('pk', p, 'g', liquidoGemaPk, Math.min(filtros.volMin, 5)); }
+    const bons = out.filter(x => x.lucro > 0).sort((a, b) => b.margem - a.margem);
+    let h = `<h2>Flips — comprar e revender na mesma moeda</h2>
+      <div class="nota">Compra no <b>menor anúncio</b> agora e revende pela <b>média de venda de 7 dias</b>, já com a taxa. Só aparece o que dá lucro depois da taxa. Anúncio abaixo da metade da média fica de fora (quase sempre é isca ou retido, disputado em sorteio). Nos pokémons a conta usa a mediana das vendas de nota até 3,8 sem shiny — confira a nota do anúncio na janela 🐉 antes de comprar.</div>${filtroVolume()}`;
+    h += '<table><tr><th>Produto</th><th>Moeda</th><th class="r">Compra</th><th class="r">Revende (média)</th><th class="r">Líquido</th><th class="r">Lucro/un</th><th class="r">Margem</th><th class="r">Vendas 7d</th></tr>';
+    for (const x of bons.slice(0, 60)) {
+      const cls = x.moeda === 'g' ? 'gema' : 'coin', ic = x.moeda === 'g' ? GEMA : OURO;
+      h += `<tr><td>${tagDe(x.tipo)} ${x.nome}</td><td>${ic}</td><td class="r ${cls}">${fmt(x.custo)}</td><td class="r ${cls}">${fmt(x.vende)}</td><td class="r ${cls}">${fmt(x.liq)}</td><td class="r bom">${fmt(x.lucro)}</td><td class="r bom"><b>${pct(x.margem)}</b></td><td class="r mut">${x.volume}</td></tr>`;
+    }
+    return h + '</table>' + (bons.length ? '' : '<div class="mut">Nenhum flip com lucro depois da taxa agora.</div>');
+  }
+
+  function dicas(M) {
+    const c = M.cot, d = [];
+    const g = rotasG2C(M).filter(x => x.volume >= 20)[0], k = rotasC2G(M).filter(x => x.volume >= 20)[0];
+    if (M.itens.some(i => i.stone)) d.push(`<b>Stone: compre e venda em <span class="coin">coins</span>.</b> Em gemas toda stone fica no menor preço que o jogo aceita (${PISO_GEMA} ${GEMA}), com a fila de anúncios crescendo e 50% de taxa na venda avulsa: não dá para contar com a venda. E comprar stone com gemas é pagar ${c.ref ? `~${fmt(PISO_GEMA * c.ref)} coins (${PISO_GEMA} gemas pela cotação)` : `${PISO_GEMA} gemas`} no que custa milhares em coins. Por isso as rotas com gemas e os ciclos deixam as stones de fora (o porquê, com os números, está no fim de Coins → Gemas).`);
+    const top = calcCiclos(M)[0];
+    if (top && top.lucroDia > 0) d.push(`<b>O ciclo que mais rende hoje:</b> comprar <b>${top.a.nome}</b> com coins e vender em gemas, depois comprar <b>${top.b.nome}</b> com essas gemas e vender em coins — ×${top.mult.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} por volta, uns <b class="coin">${fmt(top.lucroDia)}</b> coins por dia se você pegar ~10% do volume. O limite é a venda em gemas: há muita gente anunciando, então anuncie no menor preço e reponha conforme for vendendo.`);
+    d.push(`<b>Taxa em gema arredonda para cima.</b> Numa venda de 2 ${GEMA} a taxa é 1 ${GEMA} (50%!). A conta aqui já considera isso por unidade — se o jogo cobrar sobre o total do anúncio, vender em <b>lote</b> (várias unidades no mesmo anúncio) paga bem menos. Teste com um lote pequeno e veja quanto entrou.`);
+    if (k) d.push(`<b>Melhor jeito de juntar gemas agora:</b> comprar <b>${k.nome}</b> com coins (${fmt(k.custoC)}) e vender em gemas (~${fmt(k.vendeG)}, líquido ${fmt(k.liq)}) — ${fmt(k.gpm)} gemas por milhão de coins.`);
+    if (g) d.push(`<b>Melhor jeito de transformar gemas em coins agora:</b> comprar <b>${g.nome}</b> com gemas (${fmt(g.custoG)}) e vender em coins (~${fmt(g.vendeC)}, líquido ${fmt(g.liq)}) — ${fmt(g.cpg)} coins por gema.`);
+    d.push(`<b>Pokémon caro: venda em gemas.</b> A taxa em gemas do pokémon cai com o valor (13% até 500 ${GEMA}, 10% até 5.000, 7,5% acima) e em coins é 15% sempre. Uma venda de 1.000 ${GEMA} paga ${1000 - liquidoGemaPk(1000)} ${GEMA} (${((1000 - liquidoGemaPk(1000)) / 10).toFixed(1)}%); de 10.000 ${GEMA}, ${(10000 - liquidoGemaPk(10000)).toLocaleString('pt-BR')} ${GEMA} (${((10000 - liquidoGemaPk(10000)) / 100).toFixed(1)}%).`);
+    d.push(`<b>Coins perdem valor; gemas não.</b> O próprio jogo explica que o ouro é impresso a cada abate (inflação) e que a gema tem lastro em USDT. Guardar riqueza grande em <span class="gema">gemas</span> (ou em itens que vendem em gemas) protege contra a inflação do ouro; para gastar no jogo, converta na hora pela melhor rota.`);
+    d.push(`<b>Use a média de venda, não o anúncio.</b> Anúncio é o preço que alguém <i>pede</i>; a média de 7 dias é o que de fato <i>vendeu</i>. Para vender rápido, anuncie um pouco abaixo da média; para lucrar mais, anuncie na média e espere.`);
+    d.push(`<b>Liquidez manda.</b> Um ciclo ×10 com 3 vendas por semana não aguenta volume: você inunda o mercado e o preço cai. Prefira rotas com muitas vendas, mesmo com multiplicador menor, e aumente aos poucos.`);
+    d.push(`<b>Retido e sorteio são regra do jogo.</b> Anúncio novo fica retido e, ao liberar, quem pedir nos 3 primeiros segundos entra num sorteio com chance igual. O 🎯 Sniper respeita isso — não há como (nem se deve) furar.`);
+    d.push(`<b>Taxa não volta.</b> Cada compra-e-revenda paga 15% (ou a faixa da gema). Um flip só vale se a diferença entre a compra e a média de venda for maior que a taxa — a aba Flips já faz essa conta.`);
+    return '<h2>Dicas para a sua economia</h2>' + d.map(x => `<div class="dica">${x}</div>`).join('') +
+      `<div class="nota" style="margin-top:14px">Os números mudam com o mercado: a janela recalcula toda vez que o app coleta preços (itens a cada 5 min, pokémons a cada 20 min). Os pokémons usam só nota até 3,8 sem shiny; nota alta e shiny valem bem mais — avalie esses na janela 🐉.</div>`;
+  }
+
+  for (const b of $('abas').children) b.onclick = () => { aba = b.dataset.a; try { localStorage.setItem('ec-aba', aba); } catch {} render(); };
+  api.onEcState(s => { D = s; render(); });
+</script>
+</body>
+</html>

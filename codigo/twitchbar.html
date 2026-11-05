@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<style>
+  :root { --bg:#18181b; --row:#1f1f23; --hover:#2c2c33; --on:#9147ff; --fg:#efeff1; --mut:#adadb8; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg);
+    font:12px system-ui, "Segoe UI", sans-serif; user-select:none; overflow:hidden; }
+  body { display:flex; flex-direction:column; border-left:2px solid #000; }
+  .head { display:flex; align-items:center; gap:6px; height:40px; padding:0 6px; flex-shrink:0; }
+  .sp { flex:1; }
+  .qtd { color:var(--mut); white-space:nowrap; }
+  button { height:28px; min-width:28px; border-radius:6px; border:1px solid #3a3a42; background:#1f1f23;
+    color:var(--fg); cursor:pointer; font:inherit; flex-shrink:0; padding:0 7px; }
+  button:hover { background:var(--hover); }
+  /* O nome é o que cede quando falta espaço: sem isso, os botões da ponta saem do painel */
+  #conta { max-width:130px; min-width:40px; flex-shrink:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #bau { opacity:.6; white-space:nowrap; }
+  #bau.ligado { opacity:1; border-color:#2fbf71; color:#5cf29a; }
+  #conta.entrar { background:var(--on); border-color:var(--on); font-weight:600; }
+  #kick.entrar { background:#53fc18; border-color:#53fc18; color:#000; font-weight:700; }
+  .row .pl { font-size:10px; font-weight:800; width:14px; height:14px; line-height:14px; text-align:center;
+    border-radius:3px; flex-shrink:0; }
+  .row .pl.twitch { background:#9147ff; color:#fff; }
+  .row .pl.kick { background:#53fc18; color:#000; }
+  input { flex:1; min-width:0; height:28px; font:inherit; background:#000; color:#fff; border:1px solid var(--on);
+    border-radius:6px; padding:0 8px; }
+  #lista { flex:1; overflow-y:auto; padding:0 6px 6px; }
+  #lista::-webkit-scrollbar { width:8px; }
+  #lista::-webkit-scrollbar-thumb { background:#3a3a42; border-radius:4px; }
+  .row { display:flex; align-items:center; gap:6px; height:28px; margin-top:2px; padding:0 4px 0 8px;
+    border-radius:6px; background:var(--row); cursor:pointer; }
+  .row:hover { background:var(--hover); }
+  .row.on { background:var(--on); }
+  .row .n { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+  .row .ic { width:16px; text-align:center; }
+  .row .pts { color:var(--mut); font-size:11px; font-variant-numeric:tabular-nums; flex-shrink:0; }
+  .row.on .pts { color:inherit; opacity:.85; }
+  .row .acao { opacity:0; padding:2px 5px; border-radius:4px; }
+  .row:hover .acao, .row.on .acao { opacity:.85; }
+  .row .acao:hover { opacity:1; background:rgba(0,0,0,.3); }
+  .vazio { color:var(--mut); padding:6px 4px; }
+  /* A live que está tocando som fica com o 🔊 sempre aceso */
+  .row .acao.ouv.ligado { opacity:1; background:#f5c518; color:#000; }
+  #ouvindo { background:#f5c518; border-color:#f5c518; color:#000; font-weight:600; max-width:120px; min-width:40px;
+    flex-shrink:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+</style>
+</head>
+<body>
+<div class="head">
+  <button id="conta"></button>
+  <button id="kick"></button>
+  <input id="novo" placeholder="canal da Twitch, kick:canal ou um link" style="display:none">
+  <span class="sp" id="sp"></span>
+  <button id="ouvindo" style="display:none"></button>
+  <span class="qtd" id="qtd"></span>
+  <button id="bau"></button>
+  <button id="auto" style="display:none">🔄</button>
+  <button id="lst" title="Mostrar/esconder a lista de lives"></button>
+  <button id="add" title="Abrir uma live (nome do canal ou link)">+</button>
+</div>
+<div id="lista"></div>
+<script>
+  let st = { canais: [], ativo: '', lista: true };
+  const $ = id => document.getElementById(id);
+  const lista = $('lista'), novo = $('novo'), add = $('add'), conta = $('conta');
+
+  function render() {
+    // Quem está logado na Twitch nesta conta do jogo; sem login, o botão de entrar em destaque
+    conta.textContent = st.usuario ? `👤 ${st.usuario}` : 'Entrar na Twitch';
+    conta.className = st.usuario ? '' : 'entrar';
+    conta.title = st.usuario
+      ? `Twitch conectada na ${st.nome}: ${st.usuario}. Clique para trocar de conta.`
+      : `Entrar na Twitch na ${st.nome} (use a Twitch vinculada a esta conta do jogo)`;
+    const kick = $('kick');
+    kick.textContent = st.kick ? 'K ✓' : 'Kick';
+    kick.className = st.kick ? '' : 'entrar';
+    kick.title = st.kick
+      ? `Kick conectada na ${st.nome}. Clique para abrir a Kick desta conta.`
+      : `Entrar na Kick na ${st.nome} (use a Kick vinculada a esta conta do jogo)`;
+    const o = st.ouvir;
+    $('ouvindo').style.display = o ? '' : 'none';
+    if (o) {
+      $('ouvindo').textContent = `🔊 ${o.nome} ✕`;
+      $('ouvindo').title = `Ouvindo ${o.nome} (${o.contaNome}). Clique para parar o som.`;
+    }
+    const n = st.canais.length;
+    $('qtd').textContent = n ? `${n} live${n > 1 ? 's' : ''}` : '';
+    $('lst').textContent = st.lista ? '▲' : '▼';
+    $('lst').style.display = n ? '' : 'none';
+
+    // O baú dos pontos do canal: vale para as lives da Twitch com vídeo de todas as contas
+    const bau = st.bau ?? {};
+    $('bau').textContent = bau.ligado ? `🎁 ${bau.hoje}` : '🎁';
+    $('bau').className = bau.ligado ? 'ligado' : '';
+    $('bau').title = (bau.ligado
+      ? `Baú ligado: o app clica sozinho no baú das lives da Twitch com vídeo aberto. Resgatados hoje: ${bau.hoje}. Clique para desligar.`
+      : 'Baú desligado. Ligado, o app clica sozinho no baú das lives da Twitch com vídeo aberto (+50 pontos a cada 15 min). Nunca gasta pontos.') +
+      '\nOs termos da Twitch proíbem meios automáticos de forma geral: ligar é decisão sua.';
+
+    // Verificação automática das lives com pontos (só aparece na conta que tem ela ligada)
+    const a = st.auto, hora = ms => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    $('auto').style.display = a ? '' : 'none';
+    if (a) {
+      $('auto').title = 'A cada 30 min, e em ~1 min quando a lista de lives do jogo muda: deixa abertas, na Twitch e na Kick, as 2 lives no ar com mais pontos (cada uma só dá pontos em 2 por vez) e fecha as outras. Clique para conferir agora.\n' +
+        'Só confere a plataforma em que esta conta está logada.\n' +
+        (a.ultima ? `Última conferência: ${hora(a.ultima)} — ${a.noAr} lives mantidas, ${a.abertas.length ? 'abri ' + a.abertas.join(', ') : 'nenhuma nova'}${a.erro ? ` (${a.erro})` : ''}` : 'Ainda não conferiu.') +
+        (a.proxima ? `\nPróxima: ${hora(a.proxima)}` : '');
+    }
+
+    lista.innerHTML = '';
+    if (!n) {
+      const v = document.createElement('div');
+      v.className = 'vazio';
+      v.textContent = 'Clique num canal no Bônus Twitch ou na Kick do jogo, ou em +';
+      lista.appendChild(v);
+      return;
+    }
+    for (const c of st.canais) {
+      const on = c.id === st.ativo;
+      const kick = c.plat === 'kick';
+      const el = document.createElement('div');
+      el.className = 'row' + (on ? ' on' : '');
+      el.title = (kick ? 'Kick · ' : 'Twitch · ') + (c.video ? 'vídeo + chat' : 'só o chat — atenção: os pontos só caem assistindo o vídeo') +
+        (c.pontos != null ? ` · ${c.pontos.toLocaleString('pt-BR')} pontos do canal` : '');
+      el.innerHTML = `<span class="pl ${kick ? 'kick' : 'twitch'}">${kick ? 'K' : 'T'}</span><span class="ic"></span><span class="n"></span><span class="pts"></span>
+        <span class="acao ouv">🔊</span><span class="acao md"></span><span class="acao rl" title="Recarregar">⟳</span><span class="acao x" title="Fechar esta live">✕</span>`;
+      const ouvindo = o && o.conta === st.conta && o.id === c.id;
+      const ouv = el.querySelector('.ouv');
+      ouv.classList.toggle('ligado', !!ouvindo);
+      ouv.title = ouvindo ? 'Parar de ouvir esta live' : 'Ouvir esta live (o som continua mesmo com ela escondida; só uma por vez)';
+      el.querySelector('.ic').textContent = c.video ? '▶' : '💬';
+      el.querySelector('.n').textContent = c.login;
+      el.querySelector('.pts').textContent = c.pontos != null ? c.pontos.toLocaleString('pt-BR') : '';
+      const md = el.querySelector('.md');
+      md.textContent = c.video ? '💬' : '▶';
+      md.title = c.video ? 'Trocar para só o chat (gasta menos, mas não ganha pontos)' : 'Ver o vídeo (é o que dá os pontos)';
+      el.onclick = e => {
+        const cl = e.target.classList;
+        if (cl.contains('x')) return api.twRemove(c.id);
+        if (cl.contains('ouv')) return api.twOuvir(c.id);
+        if (cl.contains('md')) return api.twVideo(c.id);
+        if (cl.contains('rl')) return api.twReload(c.id);
+        api.twSelect(c.id);
+      };
+      lista.appendChild(el);
+    }
+    lista.querySelector('.row.on')?.scrollIntoView({ block: 'nearest' });
+  }
+
+  function abrirCampo(abrir) {
+    novo.style.display = abrir ? '' : 'none';
+    $('sp').style.display = abrir ? 'none' : '';
+    $('qtd').style.display = abrir ? 'none' : '';
+    add.textContent = abrir ? '✓' : '+';
+    if (abrir) { novo.value = ''; novo.focus(); }
+  }
+  add.onclick = () => {
+    if (novo.style.display === 'none') return abrirCampo(true);
+    if (novo.value.trim()) api.twAdd(novo.value);
+    abrirCampo(false);
+  };
+  novo.onkeydown = e => {
+    if (e.key === 'Enter') add.click();
+    if (e.key === 'Escape') abrirCampo(false);
+  };
+  // Tab: próxima conta (Shift+Tab, a anterior), menos enquanto se digita um canal
+  addEventListener('keydown', e => {
+    if (e.key !== 'Tab' || e.ctrlKey || e.altKey || e.metaKey || e.target === novo) return;
+    e.preventDefault();
+    if (!e.repeat) api.proxima(e.shiftKey ? -1 : 1);
+  });
+  conta.onclick = () => api.twLogin('twitch');
+  $('kick').onclick = () => api.twLogin('kick');
+  $('lst').onclick = () => api.twLista();
+  $('auto').onclick = () => api.twAuto();
+  $('bau').onclick = () => api.twBau();
+  $('ouvindo').onclick = () => api.twPararOuvir();
+
+  api.onTwState(s => { st = s; render(); });
+</script>
+</body>
+</html>

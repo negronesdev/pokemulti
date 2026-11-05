@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Monitor de Preços do RMT</title>
+<style>
+  :root { --bg:#151515; --box:#1f1f23; --linha:#2a2a30; --fg:#eee; --mut:#9a9a9a; --sobe:#3fb950; --desce:#f0544f; --gema:#e879f9; --coin:#f5c518; --med:#8ab4f8; --op:#22d3ee; --vend:#a78bfa; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:13px system-ui, "Segoe UI", sans-serif; }
+  body { display:flex; flex-direction:column; }
+  header { display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid var(--linha); flex-wrap:wrap; }
+  .mut { color:var(--mut); font-size:12px; }
+  .sp { flex:1; }
+  button { height:28px; padding:0 10px; border-radius:6px; border:1px solid #3a3a42; background:#26262c; color:var(--fg); cursor:pointer; font:inherit; }
+  button:hover { background:#32323a; }
+  button.on { background:#6b3fd6; border-color:#6b3fd6; }
+  .seg { display:inline-flex; border:1px solid #3a3a42; border-radius:6px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; background:transparent; }
+  .seg button.on { background:#6b3fd6; }
+  input[type=search] { height:28px; width:170px; background:#000; color:#fff; border:1px solid #444; border-radius:6px; padding:0 8px; font:inherit; }
+  input[type=number] { width:64px; height:26px; background:#000; color:#fff; border:1px solid #444; border-radius:5px; padding:0 6px; font:inherit; }
+  .controles { display:flex; gap:10px; align-items:center; padding:8px 12px; flex-wrap:wrap; border-bottom:1px solid var(--linha); }
+  .rot { color:var(--mut); font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+  #opcoes { display:none; gap:14px; align-items:center; padding:8px 12px; flex-wrap:wrap; border-bottom:1px solid var(--linha); background:#1a1a1e; }
+  #opcoes.aberto { display:flex; }
+  #opcoes label { display:flex; align-items:center; gap:6px; }
+  main { flex:1; display:flex; min-height:0; }
+  #lista { width:56%; overflow-y:auto; border-right:1px solid var(--linha); }
+  .row { display:grid; grid-template-columns:1fr 78px 78px 74px 104px; gap:8px; align-items:center; padding:6px 12px; border-bottom:1px solid var(--linha); cursor:pointer; }
+  .row:hover { background:#1c1c20; }
+  .row.on { background:#2a2238; }
+  .row .n { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .row .v, .row .p, .row .d { text-align:right; font-variant-numeric:tabular-nums; }
+  .row .p { font-weight:700; }
+  .sobe { color:var(--sobe); } .desce { color:var(--desce); } .igual { color:var(--mut); }
+  .barato { color:var(--op); font-weight:700; } .caro { color:var(--mut); }
+  .fogo { background:#0e3a44; border-radius:4px; padding:1px 5px; }
+  .cab { position:sticky; top:0; background:var(--bg); font-size:11px; color:var(--mut); cursor:default; z-index:1; }
+  .cab:hover { background:var(--bg); }
+  #lado { flex:1; display:flex; flex-direction:column; min-width:0; }
+  #det { padding:14px; overflow-y:auto; flex:1; }
+  #det h1 { margin:0; font-size:18px; }
+  .stats { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+  .stat { background:var(--box); border:1px solid var(--linha); border-radius:8px; padding:8px 10px; min-width:118px; }
+  .stat b { display:block; font-size:16px; margin-top:2px; font-variant-numeric:tabular-nums; }
+  .legenda { display:flex; flex-wrap:wrap; gap:4px 14px; font-size:12px; color:var(--mut); margin-top:6px; }
+  .legenda i { display:inline-block; width:18px; height:3px; vertical-align:middle; margin-right:5px; }
+  .legenda i.barra { width:9px; height:10px; }
+  .legenda i.media { width:9px; height:10px; border:1px dashed #7a7a84; }
+  #alertas { border-top:1px solid var(--linha); max-height:34%; overflow-y:auto; padding:8px 14px; background:#18181b; }
+  #alertas h2 { margin:0 0 6px; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--op); }
+  .al { display:flex; gap:8px; padding:4px 0; border-bottom:1px solid #222; cursor:pointer; font-size:12px; }
+  .al:hover { color:#fff; }
+  .al .q { color:var(--mut); width:86px; flex-shrink:0; }
+  .vazio { padding:30px; color:var(--mut); text-align:center; line-height:1.6; }
+  #tip { position:fixed; pointer-events:none; background:#000; border:1px solid #444; border-radius:6px; padding:6px 8px; font-size:12px; display:none; z-index:9; }
+</style>
+</head>
+<body>
+<header>
+  <b>📈 Monitor de Preços do RMT</b>
+  <span class="mut" id="info"></span>
+  <span class="sp"></span>
+  <button id="cfg" title="Intervalos e alertas">⚙ Configurar</button>
+  <button id="agora" title="Verifica agora e grava um ponto no histórico">Verificar agora</button>
+</header>
+<div id="opcoes">
+  <label>Verificar a cada <input type="number" id="o-verificarMin" min="2" max="1440"> min</label>
+  <label>Histórico (gráfico) a cada <input type="number" id="o-historicoMin" min="15" max="1440"> min</label>
+  <label>Avisar quando o menor anúncio estiver <input type="number" id="o-alertaPct" min="5" max="90"> % abaixo da média 7d</label>
+  <label>só se vendeu <input type="number" id="o-alertaMinUnid" min="0"> + un. na semana</label>
+  <label title="Lê a Tabela de preços do jogo para saber quantos foram vendidos em cada dia. 0 desliga.">Contar os vendidos a cada <input type="number" id="o-vendidosMin" min="0" max="1440"> min</label>
+  <label><input type="checkbox" id="o-alertas"> notificação do Windows</label>
+</div>
+<div class="controles">
+  <span class="rot">Moeda</span>
+  <span class="seg" id="moeda"><button data-v="orb">Gemas</button><button data-v="gold">Coins</button></span>
+  <span class="rot">Valor</span>
+  <span class="seg" id="valor"><button data-v="min" title="O anúncio mais barato no momento">Menor anúncio</button><button data-v="med" title="Média do que foi vendido nos últimos 7 dias">Média de venda 7d</button></span>
+  <span class="rot">Variação vs</span>
+  <span class="seg" id="ref"><button data-v="ant">Ponto anterior</button><button data-v="24h">24 h</button><button data-v="7d">7 dias</button></span>
+  <span class="rot">Gráfico</span>
+  <span class="seg" id="grafico"><button data-v="dia" title="Uma vela por dia: abertura, fechamento, mínima e máxima do menor anúncio">Diário</button><button data-v="hora">Por hora</button></span>
+  <span class="seg" id="periodo"><button data-v="7">7d</button><button data-v="30">30d</button><button data-v="90">90d</button><button data-v="0">Tudo</button></span>
+  <span class="rot">Ordem</span>
+  <span class="seg" id="ordem"><button data-v="barato" title="Menor anúncio mais abaixo da média de venda: as oportunidades de compra">Mais baratos</button><button data-v="alta">Maior alta</button><button data-v="queda">Maior queda</button><button data-v="nome">Nome</button></span>
+  <span class="sp"></span>
+  <input type="search" id="busca" placeholder="buscar item…">
+</div>
+<main>
+  <div id="lista"></div>
+  <div id="lado">
+    <div id="det"></div>
+    <div id="alertas"></div>
+  </div>
+</main>
+<div id="tip"></div>
+<script>
+  // Colunas de cada item: [menorGema, menorCoin, anuncios, mediaGema7d, unidGema7d, mediaCoin7d, unidCoin7d]
+  const COL = { orb: { min: 0, med: 3, uni: 4 }, gold: { min: 1, med: 5, uni: 6 } };
+  const op = { moeda: 'orb', valor: 'min', ref: 'ant', ordem: 'barato', busca: '', sel: null, grafico: 'dia', periodo: '30' };
+  try { Object.assign(op, JSON.parse(localStorage.getItem('pc-op') || '{}'), { busca: '' }); } catch {}
+  let dados = null, regs = [];
+  const $ = id => document.getElementById(id);
+  const hora = ms => new Date(ms).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const hh = ms => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const fmt = v => {
+    if (v == null) return '—';
+    const a = Math.abs(v);
+    // [a partir de, divide por, letra]: o K só entra de 10 mil para cima, mas divide por mil (antes dividia por 10 mil e 71.000 saía "7,1K")
+    for (const [lim, div, s] of [[1e12, 1e12, 'T'], [1e9, 1e9, 'B'], [1e6, 1e6, 'M'], [1e4, 1e3, 'K']]) if (a >= lim) return (v / div).toLocaleString('pt-BR', { maximumFractionDigits: v / div >= 100 ? 0 : 1 }) + s;
+    return Math.round(v).toLocaleString('pt-BR');
+  };
+  const nome = id => dados?.nomes?.[id] || ('item ' + id);
+  const ehStone = id => /\bstone$/i.test(nome(id));
+  const moedaTxt = m => (m === 'orb' ? 'gemas' : 'coins');
+
+  // O histórico mais a verificação de agora (se for mais nova que o último ponto)
+  function montarRegs() {
+    regs = dados.registros.slice();
+    if (dados.atual && (!regs.length || dados.atual.em > regs[regs.length - 1].em)) regs.push(dados.atual);
+  }
+  function serie(id, valor = op.valor, moeda = op.moeda) {
+    const c = COL[moeda][valor];
+    const out = [];
+    for (const r of regs) { const l = r.itens[id]; if (l && l[c] != null) out.push({ em: r.em, v: l[c] }); }
+    return out;
+  }
+  function referencia(s) {
+    if (s.length < 2) return null;
+    const ult = s[s.length - 1];
+    if (op.ref === 'ant') return s[s.length - 2];
+    const alvo = ult.em - (op.ref === '24h' ? 864e5 : 7 * 864e5);
+    let melhor = null;
+    for (const p of s) if (p.em <= alvo + 30 * 60e3) melhor = p;
+    return melhor;
+  }
+  function variacao(s) { const r = referencia(s); return !r || !r.v ? null : (s[s.length - 1].v - r.v) / r.v * 100; }
+  // Quanto o menor anúncio está abaixo (negativo) ou acima da média de venda dos 7 dias
+  function vsMedia(l) {
+    const c = COL[op.moeda];
+    const min = l?.[c.min], med = l?.[c.med];
+    return min == null || !med ? null : (min - med) / med * 100;
+  }
+  const classe = p => (p == null || Math.abs(p) < 0.05 ? 'igual' : p > 0 ? 'sobe' : 'desce');
+  const pctTxt = p => (p == null ? '—' : (p > 0 ? '▲ ' : p < 0 ? '▼ ' : '') + Math.abs(p).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%');
+
+  function spark(s, cls) {
+    const pts = s.slice(-28);
+    if (pts.length < 2) return '<svg width="104" height="26"></svg>';
+    const vs = pts.map(p => p.v), mn = Math.min(...vs), mx = Math.max(...vs), d = mx - mn || 1;
+    const xy = pts.map((p, i) => `${(i / (pts.length - 1) * 100 + 2).toFixed(1)},${(23 - (p.v - mn) / d * 20).toFixed(1)}`).join(' ');
+    const cor = cls === 'sobe' ? 'var(--sobe)' : cls === 'desce' ? 'var(--desce)' : 'var(--mut)';
+    return `<svg width="104" height="26"><polyline points="${xy}" fill="none" stroke="${cor}" stroke-width="1.6"/></svg>`;
+  }
+
+  function render() {
+    for (const g of ['moeda', 'valor', 'ref', 'ordem', 'grafico', 'periodo']) for (const b of $(g).children) b.classList.toggle('on', b.dataset.v === op[g]);
+    try { localStorage.setItem('pc-op', JSON.stringify({ ...op, busca: '' })); } catch {}
+    if (!dados) return;
+    montarRegs();
+    const o = dados.opcoes;
+    $('info').textContent = dados.atual
+      ? `verificado ${hh(dados.atual.em)} · próxima ~${hh(dados.proxima)} (a cada ${o.verificarMin} min) · ${dados.registros.length} pontos no gráfico`
+      : 'Ainda sem verificação — a primeira sai alguns minutos depois de abrir o app, ou clique em "Verificar agora".';
+    for (const k of ['verificarMin', 'historicoMin', 'alertaPct', 'alertaMinUnid', 'vendidosMin']) if (document.activeElement !== $('o-' + k)) $('o-' + k).value = o[k];
+    $('o-alertas').checked = o.alertas;
+
+    const lista = $('lista');
+    if (!regs.length) { lista.innerHTML = '<div class="vazio">Ainda sem dados.</div>'; $('det').innerHTML = ''; renderAlertas(); return; }
+    const ultimo = regs[regs.length - 1].itens;
+    const busca = op.busca.trim().toLowerCase();
+    let linhas = Object.keys(ultimo).map(id => {
+      const s = serie(id);
+      return { id, s, atual: s.length ? s[s.length - 1].v : null, pct: variacao(s), vm: vsMedia(ultimo[id]) };
+    }).filter(l => l.atual != null && (!busca || nome(l.id).toLowerCase().includes(busca))
+      // Pedido do usuário (23/10/2026): as stones só interessam em coins; em gemas ficam de fora
+      && !(op.moeda === 'orb' && ehStone(l.id)));
+    const por = { barato: l => l.vm, alta: l => -l.pct, queda: l => l.pct };
+    if (op.ordem === 'nome') linhas.sort((a, b) => nome(a.id).localeCompare(nome(b.id)));
+    else {
+      const f = por[op.ordem];
+      linhas.sort((a, b) => (f(a) ?? Infinity) - (f(b) ?? Infinity) || nome(a.id).localeCompare(nome(b.id)));
+    }
+
+    lista.innerHTML = `<div class="row cab"><span>Item (${linhas.length})</span><span class="v">Agora</span><span class="d" title="Menor anúncio comparado à média de venda dos 7 dias">vs média</span><span class="p">Variação</span><span>Histórico</span></div>`;
+    for (const l of linhas) {
+      const c = classe(l.pct);
+      const op_ = l.vm != null && -l.vm >= o.alertaPct && op.valor === 'min';
+      const el = document.createElement('div');
+      el.className = 'row' + (l.id === op.sel ? ' on' : '');
+      el.innerHTML = `<span class="n"></span><span class="v">${fmt(l.atual)}</span>
+        <span class="d ${l.vm == null ? 'igual' : l.vm < 0 ? 'barato' : 'caro'}"><span class="${op_ ? 'fogo' : ''}">${l.vm == null ? '—' : (l.vm > 0 ? '+' : '') + Math.round(l.vm) + '%'}</span></span>
+        <span class="p ${c}">${pctTxt(l.pct)}</span><span>${spark(l.s, c)}</span>`;
+      el.querySelector('.n').textContent = (op_ ? '🔥 ' : '') + nome(l.id);
+      el.onclick = () => { op.sel = l.id; render(); };
+      lista.appendChild(el);
+    }
+    if (!op.sel || !linhas.some(l => l.id === op.sel)) op.sel = linhas[0]?.id ?? null;
+    detalhe(ultimo);
+    renderAlertas();
+  }
+
+  function renderAlertas() {
+    const box = $('alertas');
+    const al = (dados?.alertas ?? []).slice().reverse();
+    box.innerHTML = `<h2>🔔 Oportunidades avisadas (${al.length})</h2>`;
+    if (!al.length) { box.insertAdjacentHTML('beforeend', `<div class="mut">Nenhuma ainda. O aviso sai quando o menor anúncio fica ${dados?.opcoes?.alertaPct ?? 30}% ou mais abaixo da média de venda de 7 dias.</div>`); return; }
+    for (const a of al.slice(0, 60)) {
+      const d = document.createElement('div');
+      d.className = 'al';
+      d.innerHTML = `<span class="q">${hora(a.em)}</span><span class="t"></span>`;
+      d.querySelector('.t').textContent = `${nome(a.id)} — ${fmt(a.preco)} ${moedaTxt(a.moeda)} (média ${fmt(a.media)}, −${a.desconto}%) · ${a.anuncios} anúncios`;
+      d.onclick = () => { op.sel = String(a.id); op.moeda = a.moeda; op.valor = 'min'; render(); };
+      box.appendChild(d);
+    }
+  }
+
+  function detalhe(ultimo) {
+    const det = $('det');
+    const id = op.sel;
+    if (!id) { det.innerHTML = ''; return; }
+    const sMin = serie(id, 'min'), sMed = serie(id, 'med');
+    const l = ultimo[id] || [];
+    const c = COL[op.moeda];
+    const s = op.valor === 'min' ? sMin : sMed;
+    const pct = variacao(s), vm = vsMedia(l);
+    const vs = s.map(p => p.v);
+    det.innerHTML = `<h1></h1>
+      <div class="stats">
+        <div class="stat"><span class="mut">Menor anúncio agora</span><b>${fmt(l[c.min])}</b></div>
+        <div class="stat"><span class="mut">Média de venda 7d</span><b>${fmt(l[c.med])}</b><span class="mut">${l[c.uni] != null ? fmt(l[c.uni]) + ' un. vendidas' : ''}</span></div>
+        <div class="stat"><span class="mut">Menor vs média</span><b class="${vm == null ? '' : vm < 0 ? 'barato' : 'caro'}">${vm == null ? '—' : (vm > 0 ? '+' : '') + vm.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%'}</b></div>
+        <div class="stat"><span class="mut">Variação (${op.ref === 'ant' ? 'ponto anterior' : op.ref})</span><b class="${classe(pct)}">${pctTxt(pct)}</b></div>
+        <div class="stat"><span class="mut">Mín / máx no gráfico</span><b>${vs.length ? fmt(Math.min(...vs)) + ' / ' + fmt(Math.max(...vs)) : '—'}</b></div>
+        <div class="stat"><span class="mut">Anúncios agora</span><b>${fmt(l[2] ?? 0)}</b></div>
+      </div>
+      <div id="graf"></div>
+      <div class="legenda"><span><i style="background:${op.moeda === 'orb' ? 'var(--gema)' : 'var(--coin)'}"></i>Menor anúncio</span><span><i style="background:var(--med)"></i>Média de venda 7d</span><span>em ${moedaTxt(op.moeda)}</span></div>`;
+    det.querySelector('h1').textContent = nome(id);
+    if (op.grafico === 'dia') { velas($('graf'), id); return; }
+    const desde = Number(op.periodo) ? Date.now() - Number(op.periodo) * 864e5 : 0;
+    grafico($('graf'), [
+      { s: sMin.filter(p => p.em >= desde), cor: op.moeda === 'orb' ? 'var(--gema)' : 'var(--coin)', nome: 'Menor anúncio', grossa: op.valor === 'min' },
+      { s: sMed.filter(p => p.em >= desde), cor: 'var(--med)', nome: 'Média 7d', grossa: op.valor === 'med' }
+    ]);
+  }
+
+  // Quantos saíram no dia, nesta moeda, pelo que o app contou da Tabela de preços do jogo: { n, valor, desde }. `desde`
+  // só vem no dia com algum trecho sem contagem (o `n` é só o que deu para contar). Sem contagem nenhuma: null.
+  function vendidoDe(dia, id) {
+    const v = dados.vendidos;
+    if (!v?.inicio) return null;
+    const ini = new Date(dia + 'T00:00').getTime(), fim = new Date(ini + 26 * 36e5).setHours(0, 0, 0, 0);
+    const fal = v.faltam?.[`${id}:${op.moeda}`] ?? [[0, v.inicio], ...(v.buracos ?? [])];
+    if (fal.some(([de, ate]) => de <= ini && ate >= fim)) return null;
+    const l = v.dias?.[dia]?.[id], b = op.moeda === 'orb' ? 0 : 2, falta = fal.filter(([de, ate]) => de < fim && ate > ini);
+    return { n: l?.[b] ?? 0, valor: l?.[b + 1] ?? 0, desde: falta.length ? Math.max(...falta.map(t => t[1])) : null };
+  }
+
+  // Velas diárias do menor anúncio (abertura, fechamento, mínima e máxima do dia) e a linha da média de
+  // venda de 7 dias. Verde: fechou acima de onde abriu; vermelho: abaixo. Embaixo, os vendidos de cada dia; o dia sem
+  // contagem mostra só o contorno da média dos 7 dias (o único número que o jogo dá para ele).
+  // Diário: [gAbre, gFecha, gMin, gMax, cAbre, cFecha, cMin, cMax, mediaGema, unidGema, mediaCoin, unidCoin, anuncios]
+  function velas(host, id) {
+    $('tip').style.display = 'none';
+    const base = op.moeda === 'orb' ? 0 : 4, colMed = op.moeda === 'orb' ? 8 : 10;
+    let dias = Object.keys(dados.diario || {}).sort();
+    if (Number(op.periodo)) dias = dias.slice(-Number(op.periodo));
+    const pts = dias.map(d => ({ d, x: dados.diario[d]?.[id] })).filter(p => p.x && p.x[base + 2] != null);
+    if (!pts.length) { host.innerHTML = '<div class="vazio">Sem dias registrados nesta moeda ainda.</div>'; return; }
+    const num = v => Math.round(v).toLocaleString('pt-BR');
+    const hoje = new Date().toLocaleDateString('sv');
+    const vols = pts.map(p => {
+      const c = vendidoDe(p.d, id), dm = `${p.d.slice(8)}/${p.d.slice(5, 7)}`;
+      if (c) {
+        const n = c.n, pm = n ? ` · preço médio ${fmt(c.valor / n)} ${moedaTxt(op.moeda)}` : '';
+        if (c.desde) return { n, rot: `≥${fmt(n)}`, cand: `, pelo menos ${num(n)} vendidos`, dica: `${dm} — pelo menos ${num(n)} vendidos (sem contagem antes das ${hh(c.desde)})${pm}`, parcial: true };
+        return { n, rot: fmt(n), cand: `, ${num(n)} vendidos`, dica: `${dm} — ${num(n)} vendidos${p.d === hoje ? ' até agora' : ''}${pm}` };
+      }
+      const media = p.x[colMed + 1] / 7;
+      if (!media) return null;
+      return { n: media, rot: media < 1 ? '<1' : `~${fmt(media)}`, cand: '', dica: `${dm} — sem contagem deste dia. Média dos 7 dias até aqui: ${media < 1 ? 'menos de 1' : `~${num(media)}`} por dia`, media: true };
+    });
+    const VOL = vols.some(Boolean) ? 80 : 0, volMax = Math.max(1, ...vols.map(c => c?.n ?? 0));
+    const W = Math.max(360, host.clientWidth || 500), H = (VOL ? 260 : 290) + VOL, L = 58, R = 12, T = 12, B = 34 + VOL;
+    const vals = pts.flatMap(p => [p.x[base + 2], p.x[base + 3], p.x[colMed]]).filter(v => v != null);
+    let mn = Math.min(...vals), mx = Math.max(...vals);
+    if (mn === mx) { mn *= 0.9; mx = mx * 1.1 || 1; }
+    const pad = (mx - mn) * 0.08; mn = Math.max(0, mn - pad); mx += pad;
+    const bw = (W - L - R) / Math.max(pts.length, 1);
+    const X = i => L + bw * (i + 0.5);
+    const Y = v => T + (1 - (v - mn) / (mx - mn)) * (H - T - B);
+    let svg = `<svg width="${W}" height="${H}" style="display:block">`;
+    for (let k = 0; k <= 4; k++) { const v = mn + (mx - mn) * k / 4; svg += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="#2a2a30"/><text x="${L - 6}" y="${Y(v) + 4}" fill="#9a9a9a" font-size="11" text-anchor="end">${fmt(v)}</text>`; }
+    const passo = Math.max(1, Math.ceil(pts.length / 8));
+    pts.forEach((p, i) => {
+      const [ab, fe, lo, hi] = [p.x[base], p.x[base + 1], p.x[base + 2], p.x[base + 3]];
+      const cor = fe > ab ? 'var(--sobe)' : fe < ab ? 'var(--desce)' : '#9a9a9a';
+      const corpoW = Math.max(3, Math.min(18, bw * 0.6));
+      const y1 = Y(Math.max(ab, fe)), y2 = Y(Math.min(ab, fe));
+      const dica = `${p.d.slice(8)}/${p.d.slice(5, 7)} — abriu ${fmt(ab)}, fechou ${fmt(fe)}, mín ${fmt(lo)}, máx ${fmt(hi)}${p.x[colMed] != null ? `, média 7d ${fmt(p.x[colMed])}` : ''}, ${p.x[12]} anúncios${vols[i]?.cand ?? ''}`;
+      svg += `<line x1="${X(i)}" x2="${X(i)}" y1="${Y(hi)}" y2="${Y(lo)}" stroke="${cor}"/>`;
+      svg += `<rect x="${X(i) - corpoW / 2}" y="${y1}" width="${corpoW}" height="${Math.max(1.5, y2 - y1)}" fill="${cor}" data-tip="${dica}"/>`;
+      if (i % passo === 0 || i === pts.length - 1) svg += `<text x="${X(i)}" y="${H - 12}" fill="#9a9a9a" font-size="11" text-anchor="middle">${p.d.slice(8)}/${p.d.slice(5, 7)}</text>`;
+    });
+    const med = pts.map((p, i) => p.x[colMed] == null ? null : `${X(i).toFixed(1)},${Y(p.x[colMed]).toFixed(1)}`).filter(Boolean);
+    if (med.length > 1) svg += `<polyline points="${med.join(' ')}" fill="none" stroke="var(--med)" stroke-width="1.6" stroke-dasharray="5 4"/>`;
+    if (VOL) {
+      const chao = H - 30, alt = 54, barraW = Math.max(3, Math.min(26, bw * 0.62));
+      svg += `<line x1="${L}" x2="${W - R}" y1="${chao}" y2="${chao}" stroke="#2a2a30"/><text x="${L - 6}" y="${chao - 2}" fill="#9a9a9a" font-size="10" text-anchor="end">vendidos</text>`;
+      vols.forEach((c, i) => {
+        if (!c) return;
+        const h = c.n ? Math.max(2, c.n / volMax * alt) : 0, y = chao - h;
+        if (h) svg += c.media
+          ? `<rect x="${X(i) - barraW / 2}" y="${y}" width="${barraW}" height="${h}" fill="none" stroke="#7a7a84" stroke-dasharray="3 2"/>`
+          : `<rect x="${X(i) - barraW / 2}" y="${y}" width="${barraW}" height="${h}" fill="var(--vend)" opacity="${c.parcial ? 0.5 : 1}"/>`;
+        if (bw >= 34) svg += `<text x="${X(i)}" y="${y - 3}" fill="${c.media ? '#9a9a9a' : '#ddd'}" font-size="10" text-anchor="middle">${c.rot.replace('<', '&lt;')}</text>`;
+        svg += `<rect x="${X(i) - bw / 2}" y="${chao - alt - 14}" width="${bw}" height="${alt + 14}" fill="transparent" data-tip="${c.dica}"/>`;
+      });
+      const leg = host.parentElement.querySelector('.legenda');
+      leg?.insertAdjacentHTML('beforeend', `<span><i class="barra" style="background:var(--vend)"></i>Vendidos no dia</span>${vols.some(c => c?.media) ? '<span title="O jogo só informa o total de 7 dias. A contagem dia a dia começa quando o app lê a Tabela de preços dele.">'
+        + '<i class="media"></i>Sem contagem: média de 7 dias</span>' : ''}${dados.vendidos?.fila ? '<span>contando os dias anteriores…</span>' : ''}`);
+    }
+    host.innerHTML = svg + '</svg>';
+    const tip = $('tip');
+    for (const c of host.querySelectorAll('[data-tip]')) {
+      c.onmouseenter = () => { tip.textContent = c.dataset.tip; tip.style.display = 'block'; };
+      c.onmousemove = e => { tip.style.left = e.clientX + 12 + 'px'; tip.style.top = e.clientY + 12 + 'px'; };
+      c.onmouseleave = () => { tip.style.display = 'none'; };
+    }
+  }
+
+  function grafico(host, series) {
+    const W = Math.max(360, host.clientWidth || 500), H = 280, L = 58, R = 12, T = 12, B = 34;
+    const todos = series.flatMap(x => x.s);
+    if (todos.length < 1) { host.innerHTML = '<div class="vazio">Sem preço registrado nesta moeda.</div>'; return; }
+    const t0 = Math.min(...todos.map(p => p.em)), t1 = Math.max(...todos.map(p => p.em));
+    let mn = Math.min(...todos.map(p => p.v)), mx = Math.max(...todos.map(p => p.v));
+    if (mn === mx) { mn *= 0.9; mx = mx * 1.1 || 1; }
+    const pad = (mx - mn) * 0.08; mn = Math.max(0, mn - pad); mx += pad;
+    const X = t => L + (t1 === t0 ? (W - L - R) / 2 : (t - t0) / (t1 - t0) * (W - L - R));
+    const Y = v => T + (1 - (v - mn) / (mx - mn)) * (H - T - B);
+    let svg = `<svg width="${W}" height="${H}" style="display:block">`;
+    for (let k = 0; k <= 4; k++) {
+      const v = mn + (mx - mn) * k / 4, y = Y(v);
+      svg += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="#2a2a30"/><text x="${L - 6}" y="${y + 4}" fill="#9a9a9a" font-size="11" text-anchor="end">${fmt(v)}</text>`;
+    }
+    const nx = Math.min(6, Math.max(1, Math.floor((W - L - R) / 110)));
+    for (let k = 0; k <= nx && t1 > t0; k++) {
+      const t = t0 + (t1 - t0) * k / nx;
+      svg += `<text x="${X(t)}" y="${H - 12}" fill="#9a9a9a" font-size="11" text-anchor="middle">${new Date(t).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit' })}h</text>`;
+    }
+    for (const x of series) {
+      if (!x.s.length) continue;
+      const pts = x.s.map(p => `${X(p.em).toFixed(1)},${Y(p.v).toFixed(1)}`).join(' ');
+      svg += `<polyline points="${pts}" fill="none" stroke="${x.cor}" stroke-width="${x.grossa ? 2.4 : 1.4}" ${x.grossa ? '' : 'stroke-dasharray="5 4"'} />`;
+      // Muitos pontos: só desenha as bolinhas se couber
+      if (x.s.length <= 200) for (const p of x.s) svg += `<circle cx="${X(p.em)}" cy="${Y(p.v)}" r="${x.grossa ? 3 : 2}" fill="${x.cor}" data-tip="${x.nome}: ${fmt(p.v)} — ${hora(p.em)}"/>`;
+    }
+    host.innerHTML = svg + '</svg>';
+    const tip = $('tip');
+    for (const c of host.querySelectorAll('circle')) {
+      c.onmouseenter = () => { tip.textContent = c.dataset.tip; tip.style.display = 'block'; };
+      c.onmousemove = e => { tip.style.left = e.clientX + 12 + 'px'; tip.style.top = e.clientY + 12 + 'px'; };
+      c.onmouseleave = () => { tip.style.display = 'none'; };
+    }
+  }
+
+  for (const g of ['moeda', 'valor', 'ref', 'ordem', 'grafico', 'periodo']) for (const b of $(g).children) b.onclick = () => { op[g] = b.dataset.v; render(); };
+  $('busca').oninput = () => { op.busca = $('busca').value; render(); };
+  $('agora').onclick = () => { $('agora').disabled = true; $('agora').textContent = 'Verificando…'; api.pcAgora(); };
+  $('cfg').onclick = () => { $('opcoes').classList.toggle('aberto'); $('cfg').classList.toggle('on'); };
+  for (const k of ['verificarMin', 'historicoMin', 'alertaPct', 'alertaMinUnid', 'vendidosMin']) $('o-' + k).onchange = () => api.pcOpcoes({ [k]: Number($('o-' + k).value) });
+  $('o-alertas').onchange = () => api.pcOpcoes({ alertas: $('o-alertas').checked });
+  window.onresize = () => regs.length && detalhe(regs[regs.length - 1].itens);
+  api.onPcVend(v => {
+    if (!dados) return;
+    dados.vendidos = v;
+    if (op.grafico === 'dia' && regs.length) detalhe(regs[regs.length - 1].itens);
+  });
+  api.onPcState(s => {
+    dados = s;
+    if (s.foco) { op.sel = String(s.foco.item); op.moeda = s.foco.moeda; op.valor = 'min'; }
+    $('agora').disabled = false; $('agora').textContent = 'Verificar agora';
+    render();
+  });
+</script>
+</body>
+</html>

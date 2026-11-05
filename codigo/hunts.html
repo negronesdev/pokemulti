@@ -1,0 +1,592 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Melhor hunt</title>
+<style>
+  :root { --bg:#151515; --box:#1f1f23; --linha:#2a2a30; --fg:#eee; --mut:#9a9a9a; --ok:#3fb950; --ruim:#f0544f; --alerta:#e3b341; --roxo:#6b3fd6; --coin:#f5c518; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:13px system-ui, "Segoe UI", sans-serif; }
+  body { display:flex; flex-direction:column; }
+  header { display:flex; align-items:center; gap:8px; padding:9px 12px; border-bottom:1px solid var(--linha); flex-wrap:wrap; }
+  .mut { color:var(--mut); font-size:12px; }
+  .sp { flex:1; }
+  button { height:28px; padding:0 10px; border-radius:6px; border:1px solid #3a3a42; background:#26262c; color:var(--fg); cursor:pointer; font:inherit; }
+  button:hover:not(:disabled) { background:#32323a; }
+  button.on { background:var(--roxo); border-color:var(--roxo); color:#fff; }
+  button:disabled { opacity:.45; cursor:default; }
+  main { flex:1; overflow-y:auto; padding:12px; }
+  .aviso { background:#2a2116; border:1px solid #6b4f1d; color:#f2d28b; border-radius:8px; padding:9px 12px; margin-bottom:10px; line-height:1.5; }
+  [hidden] { display:none !important; }
+  .card { background:var(--box); border:1px solid var(--linha); border-radius:10px; padding:10px 12px; }
+  #poke { margin-bottom:10px; line-height:1.6; }
+  #poke .nome { font-size:16px; font-weight:700; }
+  .tipo { display:inline-block; padding:0 6px; border-radius:4px; font-size:11px; font-weight:600; color:#fff; text-shadow:0 1px 1px #0008; margin-left:4px; vertical-align:1px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:10px; margin-bottom:10px; }
+  .cards .card b.grande { display:block; font-size:17px; margin:3px 0; }
+  .cards .card.melhor { border-color:var(--ok); }
+  .ganho { color:var(--ok); font-weight:700; }
+  .filtros { display:flex; gap:8px 14px; align-items:center; flex-wrap:wrap; margin:6px 0 8px; }
+  .filtros label { display:flex; align-items:center; gap:5px; cursor:pointer; }
+  .filtros input[type=checkbox] { accent-color:var(--roxo); width:15px; height:15px; margin:0; }
+  .grupo { display:flex; gap:4px; align-items:center; }
+  input[type=search], select { height:26px; background:#000; color:#fff; border:1px solid #444; border-radius:5px; padding:0 6px; font:inherit; }
+  table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
+  th { text-align:left; font-size:11px; color:var(--mut); font-weight:600; padding:5px 6px; position:sticky; top:-12px; background:var(--bg); }
+  td { padding:5px 6px; border-top:1px solid var(--linha); white-space:nowrap; }
+  td.r, th.r { text-align:right; }
+  tr.atual td { background:#1d2a36; }
+  tr.trancada td:not(:first-child) { opacity:.5; }
+  .selo { font-size:10px; font-weight:700; padding:1px 5px; border-radius:4px; margin-left:5px; vertical-align:1px; }
+  .selo.atual { background:#23415a; color:#9ccfff; }
+  .selo.tranca { background:#33333a; color:#bbb; }
+  .selo.morre { background:#4a1f1f; color:#ffb3ae; }
+  .selo.risco { background:#4a3a14; color:#f2d28b; }
+  .risco-ok { color:var(--mut); } .risco-alto { color:var(--alerta); } .risco-mata { color:var(--ruim); font-weight:700; }
+  .coin { color:var(--coin); }
+  #mais { margin-top:8px; }
+  details.como { margin-top:14px; background:var(--box); border:1px solid var(--linha); border-radius:8px; padding:8px 12px; }
+  details.como summary { cursor:pointer; color:var(--mut); }
+  details.como p { line-height:1.55; margin:8px 0 0; }
+</style>
+</head>
+<body>
+<header>
+  <b>🗺 Melhor hunt</b>
+  <div class="grupo" id="contas"></div>
+  <span class="sp"></span>
+  <span class="mut" id="calc"></span>
+  <button id="recalc" title="Lê de novo o pokémon em campo e o nível da conta e refaz as contas">Recalcular</button>
+</header>
+<main>
+  <div id="aviso" class="aviso">Carregando…</div>
+  <section id="poke" class="card" hidden></section>
+  <section id="reco" class="cards"></section>
+  <div class="filtros" id="filtros" hidden>
+    <span class="grupo" id="ordem"><span class="mut">Ordenar:</span>
+      <button data-o="xpPkH">XP do pokémon</button><button data-o="xpTrH">XP do treinador</button><button data-o="ouroH">Ouro</button><button data-o="kh">Abates</button></span>
+    <label title="Hunt acima do seu nível de treinador fica trancada no jogo"><input type="checkbox" id="soLiberadas"> só as liberadas pelo seu nível</label>
+    <label title="Onde ele cai antes de derrubar o selvagem (sem contar poção) ou não consegue derrubar"><input type="checkbox" id="semMorte"> esconder onde ele morre</label>
+    <label title="Onde um golpe do selvagem tira metade do HP ou mais, ou ele perde metade do HP por abate (poção sem parar)"><input type="checkbox" id="semRisco"> esconder as arriscadas</label>
+    <label id="rotAjustar" hidden title="Usa o ritmo que as suas 4 contas mediram de verdade (por hunt e por mapa) e os bônus de XP e de ouro medidos na hunt atual (Twitch, Kick, Sacrifício)"><input type="checkbox" id="ajustar"> ajustar pelo ritmo medido</label>
+    <label id="rotSazonal" hidden title="O tipo do dia (sorteado às 18h de Brasília): nas hunts do Mapa todo pokémon dele, o seu e os selvagens, causa o dobro de dano e leva um quarto"><input type="checkbox" id="sazonal"> contar o dia sazonal</label>
+    <label id="rotAoe" hidden title="Com o TM AoE, cada golpe acerta os selvagens num quadrado 11×11 em volta: quantos caem juntos depende do mapa e do bando. Com 3 minutos e 20 abates na hunt atual, o quanto ele rende a mais que um alvo só sai da medida; antes, vale a sua estimativa">TM AoE: <select id="aoe"><option value="1">1 por golpe</option><option value="2">2 por golpe</option><option value="3">3 por golpe</option><option value="4">4 por golpe</option></select><span id="aoeMed"></span></label>
+    <input type="search" id="busca" placeholder="hunt ou região">
+  </div>
+  <table id="tabela" hidden>
+    <thead><tr><th>#</th><th>Hunt</th><th>Região</th><th class="r">XP do pokémon/h</th><th class="r">XP do treinador/h</th><th class="r">Ouro/h</th><th class="r">Abates/h</th><th class="r" title="Dano médio que ele toma por abate · o maior golpe de um selvagem, em % do HP de combate">Risco</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <button id="mais" hidden>Mostrar mais</button>
+  <details class="como">
+    <summary>Como o cálculo é feito</summary>
+    <p><b>Do jogo, ao vivo, pela conta:</b> a lista de hunts de hoje; o XP e o ouro de cada abate e os multiplicadores (VIP, boosts e guild), com as mesmas funções do Hunt Analyser do Mapa; o nível do treinador e a hunt atual; e o pokémon em campo com os stats e o HP de combate que o próprio servidor calcula (nível, qualidade, potência, IV, refino, shiny e lendário já somados).</p>
+    <p><b>A luta, simulada aqui com as regras da Pokepédia:</b> dano = ((2 × nível/5 + 2) × poder × ataque/defesa)/50 + 2, × 1,5 de STAB, × efetividade de tipo ampliada na hunt (×2 vira ×2,5; ×0,5 vira ×0,33), × 0,925 (a média do aleatório 0,85–1,00). A cada ataque ele usa o golpe pronto de maior dano contra aquele alvo; com todos recarregando, a Investida (poder 30, física, no tipo dele). As recargas são as do jogo, encurtadas pelo Speed da espécie e pelo IV de SPD, e passam de um abate para o outro; entre golpes seus há 0,9 s (menos 10 ms por ponto de IV de SPD). O selvagem tem HP ×5, bate ×1,8 e no máximo a cada 1,4 s.</p>
+    <p><b>O ritmo (desde 28/10, as hunts "em bandos"):</b> a onda volta 2,8 s depois do último abate, e o tempo entre um abate e outro é a caminhada até o próximo bando, que depende do <b>mapa</b>: quem mata de um golpe leva de 2,3 a 5,6 s por abate, conforme o mapa. As hunts de Johto em diante usam um mapa de Kanto ou da Outland. Por abate = tempo morto + luta (48 abates seguidos, os selvagens na proporção dos pontos de spawn, as recargas correndo no tempo morto), e quem luta mais anda menos, porque o bando vem até ele enquanto ele luta: o tempo morto cai até ~1,4 s de caminhada com luta longa.</p>
+    <p><b>De onde vem o tempo de cada mapa:</b> 1) do que as suas 4 contas mediram (20 abates em 3 minutos na mesma hunt, com o mesmo pokémon, descontada a luta simulada dele): a medida de quem mata de um golpe (até 1,4 golpe por abate) é a caminhada do mapa e vale para todo pokémon, nesta hunt e nas outras do mesmo mapa; com mais golpes, ela depende demais do cálculo da luta e só vale para o mesmo pokémon nesta hunt; 2) hunt sem medida aparece com ≈: vale um tempo médio por abate (passe o mouse nos abates/h para ver de onde veio e a faixa). Com 3 minutos e 20 abates na hunt atual, os bônus de XP e de ouro que a calculadora do jogo não conhece (Twitch, Kick e Sacrifício) também passam a sair do medido.</p>
+    <p><b>O dia sazonal:</b> o tipo do dia vem da conta (o jogo sorteia às 18h de Brasília). Nas hunts do Mapa todo pokémon desse tipo, o seu e os selvagens, causa o dobro de dano e leva um quarto (dobro de ataque, defesa e vida, como o jogo conta).</p>
+    <p><b>Estimativas nossas:</b> o selvagem nasce com IV médio (16,5), qualidade 1 e potência I; um selvagem por vez, que bate do começo da luta até cair; poções e eventos não entram. Antes da medição, os bônus de XP da Twitch, da Kick e do Sacrifício também não (eles multiplicam todas as hunts igual, então não mudam a ordem). Com TM AoE, quanto ele rende a mais que um alvo só sai da medida na hunt atual (o mesmo fator em todas as hunts); antes dela, os alvos por golpe são uma estimativa sua (o tempo por abate divide por eles). O Z-Move entra como golpe (poder 2800, recarga de 60 s), sem a área 3×3.</p>
+  </details>
+</main>
+<script>
+  const $ = id => document.getElementById(id);
+  const TIPOS = {
+    NORMAL: ['Normal', '#9a9a72'], FIRE: ['Fogo', '#e8622a'], WATER: ['Água', '#4a86e8'], GRASS: ['Planta', '#5aa93e'], ELECTRIC: ['Elétrico', '#dcb414'],
+    ICE: ['Gelo', '#5cc6d0'], FIGHTING: ['Lutador', '#a8321e'], POISON: ['Veneno', '#8a3a92'], GROUND: ['Terra', '#c4a352'], FLYING: ['Voador', '#7f9ce0'],
+    PSYCHIC: ['Psíquico', '#e04a7c'], BUG: ['Inseto', '#93a81a'], ROCK: ['Pedra', '#a48f30'], GHOST: ['Fantasma', '#5c4a90'], DRAGON: ['Dragão', '#6a3ce0'],
+    DARK: ['Sombrio', '#5a4436'], STEEL: ['Aço', '#8f8fa4'], FAIRY: ['Fada', '#dc84c4'],
+  };
+  const FAIXAS = [[1, 151, 'Kanto'], [152, 251, 'Johto'], [252, 386, 'Hoenn'], [387, 493, 'Sinnoh'], [494, 649, 'Unova'],
+    [650, 721, 'Kalos'], [722, 809, 'Alola'], [810, 905, 'Galar'], [906, 1025, 'Paldea']];
+  // As regras da Pokepédia que o jogo não manda em número (o resto vem da conta: ver HUNT_ESCUTA no main.js)
+  const REGRAS = { ivSelv: 16.5, aleat: 0.925, stab: 1.5, invPoder: 30, invCd: 2000, intervaloSelv: 1400, piso: 400, abates: 48, arriscado: 0.5 };
+  // O ritmo das hunts em bandos (jogo 1.377 em diante), como o site PokéIdle Hub mediu: a caminhada de quem mata de um
+  // golpe é 83% do tempo do mapa (o resto é a pausa da onda e a 1ª caminhada de cada leva) e, com luta longa, cai até o
+  // piso de 1,41 s (virar para o próximo alvo); 2,8 s de luta levam 63% desse caminho. O mesmo mapa medido duas vezes
+  // difere 7% (10% quando a medida teve quase um golpe por abate); sem tabela, 3,33 s (a mediana dos mapas em 29/10)
+  const RITMO = { caminhada: 0.83, pisoS: 1.41, tauS: 2.8, ruido: 0.07, ruidoInd: 0.1, padraoS: 3.33 };
+  // O tempo morto por abate (caminhada, pausa da onda) com F s de luta, num mapa em que quem mata de um golpe leva s
+  const tempoMorto = (s, F) => s - Math.max(0, RITMO.caminhada * s - RITMO.pisoS) * (1 - Math.exp(-F / RITMO.tauS));
+  // O dia sazonal (shared/dia-sazonal.mjs): ×2 no dano de quem é do tipo do dia, ×¼ no de quem apanha sendo dele
+  const multSaz = (tipo, atacante, defensor) => (!tipo ? 1 : (atacante.includes(tipo) ? 2 : 1) / (defensor.includes(tipo) ? 4 : 1));
+  const CMP = new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 });
+  const fmt = n => (Number.isFinite(n) ? CMP.format(Math.round(n)) : '—');
+  const nv = n => Number(n || 0).toLocaleString('pt-BR'); // nível vai inteiro (1.750, não 1,8 mil)
+  // Arriscada: um golpe do selvagem tira metade do HP, ou ele perde metade do HP por abate (precisa de poção sem parar)
+  const arriscada = r => !r.morre && !r.naoDerruba && (r.pior >= REGRAS.arriscado || r.risco >= REGRAS.arriscado);
+  const pct = v => `${(v * 100).toLocaleString('pt-BR', { maximumFractionDigits: v < 0.1 ? 1 : 0 })}%`;
+  const esc = t => String(t ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+  const chipTipo = t => `<span class="tipo" style="background:${TIPOS[t]?.[1] ?? '#555'}">${esc(TIPOS[t]?.[0] ?? t)}</span>`;
+
+  let NOMES = [], conta = 0, E = null, D = null, R = null, H = null, MED = null, AJ = null, NOSSO = null, timer = 0;
+  // O ritmo de fora e o nosso (main.js: ritmo-site.json e ritmo-medido.json)
+  let RIT = { site: null, siteEm: 0, erro: '', baixando: false, corridas: [], fontes: new Set() };
+  const cacheCorrida = new Map();
+  const op = { ordem: 'xpPkH', soLiberadas: true, semMorte: true, semRisco: false, ajustar: true, sazonal: true, aoe: 2, busca: '', mostrar: 40 };
+  const dec = (v, n = 1) => Number(v).toLocaleString('pt-BR', { maximumFractionDigits: n });
+
+  // ---- As contas do combate (Pokepédia: Combate, Stats, Tipos)
+  const ivc = v => Math.min(32, Math.max(0, Number(v) || 0));
+  const dano = (nivel, poder, a, d, stab, ef) =>
+    (((2 * nivel / 5 + 2) * poder * Math.max(1, a) / Math.max(1, d)) / 50 + 2) * (stab ? REGRAS.stab : 1) * ef * REGRAS.aleat;
+  let efCache = new Map(), selvCache = new Map();
+  // Efetividade: a do jogo (tabela da série, com a diagonal) multiplicada nos dois tipos, ampliada na hunt
+  function efet(atk, tipos) {
+    const k = atk + '>' + tipos.join(',');
+    let v = efCache.get(k);
+    if (v == null) {
+      v = 1;
+      for (const t of tipos) v *= D.matriz[atk]?.[t] ?? 1;
+      v = v === 0 || v === 1 ? v : v > 1 ? 1 + (v - 1) * D.amp : v / D.amp;
+      efCache.set(k, v);
+    }
+    return v;
+  }
+  // Recarga com o Speed (cooldownGolpeComSpeed do jogo): o Speed base dá o potencial (1% a cada 20 até 120, depois
+  // 1% a cada 40, com teto) e o IV de SPD decide quanto dele vale
+  const potencialSpeed = s => Math.min(D.regras.tetoSpeed, s <= 120 ? s / 20 : 6 + (s - 120) / 40);
+  const cdSpeed = (cd, speedBase, iv) => (cd > 0 ? Math.round(cd * (1 - potencialSpeed(Number(speedBase) || 0) * (ivc(iv) / 32) / 100)) : 0);
+
+  // O pokémon em campo (ou o de uma corrida medida, guardado com os mesmos campos)
+  function montarHeroi(a) {
+    const esp = E[a.speciesId] || null;
+    const tipos = (a.tipos?.length ? a.tipos : esp?.t) || ['NORMAL'];
+    const st = a.stats || {}, iv = a.ivs?.speed ?? 16, speed = esp?.b?.[5] ?? 0;
+    const golpes = (esp?.g || []).filter(g => (g[4] || 1) <= (a.level || 1) && g[2] > 0 && g[1] !== 2)
+      .map(g => ({ nome: g[0], fis: g[1] === 0, poder: g[2], cd: cdSpeed(g[3], speed, iv), tipo: g[5] }));
+    if (a.zmove) golpes.push({ nome: a.zmove.name, fis: a.zmove.category === 'PHYSICAL', poder: a.zmove.power, cd: cdSpeed(a.zmove.cooldownMs, speed, iv), tipo: a.zmove.type, z: true });
+    return {
+      nivel: a.level || 1, tipos, atk: st.atk, spAtk: st.spAtk, def: st.def, spDef: st.spDef,
+      hp: a.maxHp || Math.max(24, Math.round((st.hp || 0) * 12)), golpes, iv,
+      intervalo: Math.max(REGRAS.piso, D.regras.intervalo - 10 * ivc(iv)), investida: Math.max(REGRAS.piso, REGRAS.invCd - 10 * ivc(iv)),
+    };
+  }
+
+  // O selvagem no nível da hunt: qualidade 1, potência I e IV médio
+  function selvagem(id, nivel) {
+    const k = id + ':' + nivel;
+    if (selvCache.has(k)) return selvCache.get(k);
+    const esp = E[id];
+    let w = null;
+    if (esp) {
+      const st = i => Math.round(((esp.b[i] ?? 0) + 2 * REGRAS.ivSelv) * nivel / 100);
+      w = {
+        nome: esp.n, nivel, tipos: esp.t, atk: st(1), def: st(2), spAtk: st(3), spDef: st(4), hp: Math.max(24, Math.round(st(0) * 12)) * D.multHp,
+        golpes: esp.g.filter(g => (g[4] || 1) <= nivel && g[2] > 0 && g[1] !== 2).map(g => ({ fis: g[1] === 0, poder: g[2], cd: cdSpeed(g[3], esp.b[5], REGRAS.ivSelv), tipo: g[5] })),
+        investida: Math.max(REGRAS.piso, REGRAS.invCd - 10 * REGRAS.ivSelv),
+      };
+    }
+    selvCache.set(k, w);
+    return w;
+  }
+
+  // Os selvagens da hunt contra ele (o dano dos dois lados, com o dia sazonal) e a ordem dos 48 abates, na proporção
+  // dos pontos de spawn: o que não depende do ritmo
+  function preparar(h, he, saz) {
+    const total = h.especies.reduce((s, e) => s + e[1], 0) || 1;
+    const lista = [];
+    for (const [id, pts] of h.especies) {
+      const w = selvagem(id, h.nivel);
+      if (!w) return { faltou: true };
+      const mEu = multSaz(saz, he.tipos, w.tipos), mEle = multSaz(saz, w.tipos, he.tipos);
+      const danos = he.golpes.map(g => dano(he.nivel, g.poder, g.fis ? he.atk : he.spAtk, g.fis ? w.def : w.spDef, he.tipos.includes(g.tipo), efet(g.tipo, w.tipos)) * mEu);
+      // A Investida sai no 1º tipo dele; no 2º só se o alvo for imune ao 1º
+      const tInv = efet(he.tipos[0], w.tipos) === 0 && he.tipos[1] ? he.tipos[1] : he.tipos[0];
+      const danoInv = dano(he.nivel, REGRAS.invPoder, he.atk, w.def, true, efet(tInv, w.tipos)) * mEu;
+      const golpesW = w.golpes.map(g => ({ cd: g.cd, d: dano(w.nivel, g.poder, g.fis ? w.atk : w.spAtk, g.fis ? he.def : he.spDef, w.tipos.includes(g.tipo), efet(g.tipo, he.tipos)) * D.multDano * mEle }));
+      const invW = dano(w.nivel, REGRAS.invPoder, w.atk, he.def, true, efet(w.tipos[0], he.tipos)) * D.multDano * mEle;
+      lista.push({ w, pts, danos, danoInv, golpesW, invW, pior: Math.max(invW, ...golpesW.map(g => g.d)) / REGRAS.aleat });
+    }
+    const N = REGRAS.abates, ordem = [], cred = lista.map(() => 0);
+    for (let k = 0; k < N; k++) {
+      let m = 0;
+      for (let i = 0; i < lista.length; i++) { cred[i] += lista[i].pts / total; if (cred[i] > cred[m]) m = i; }
+      cred[m] -= 1;
+      ordem.push(m);
+    }
+    return { N, lista, ordem, pior: Math.max(...lista.map(x => x.pior)) / he.hp };
+  }
+
+  // Os 48 abates com `morto` ms entre o golpe que derruba um e o 1º possível no próximo (a caminhada até o bando, a
+  // pausa da onda): as recargas correm nesse tempo e passam de um abate para o outro. A luta de cada abate vai do 1º
+  // golpe possível ao que derruba, com a espera por recarga no meio. O selvagem bate do começo da luta até cair, de 1,4
+  // em 1,4 s: o golpe pronto de maior dano, senão a Investida. null = ele não consegue derrubar
+  function lutar(p, he, morto) {
+    const pronto = he.golpes.map(() => 0), tomadoMax = p.lista.map(() => 0);
+    let invPronto = 0, prox = 0, t = 0, luta = 0, golpes = 0, tomado = 0;
+    for (let k = 0; k < p.N; k++) {
+      const x = p.lista[p.ordem[k]], ini = t;
+      let hp = x.w.hp, ta = Math.max(t, prox), passos = 0;
+      while (hp > 0) {
+        if (++passos > 400) return null;
+        let g = -1, md = 0;
+        for (let i = 0; i < pronto.length; i++) if (pronto[i] <= ta && x.danos[i] > md) { md = x.danos[i]; g = i; }
+        if (g >= 0) { hp -= md; pronto[g] = ta + he.golpes[g].cd; }
+        else if (invPronto <= ta && x.danoInv > 0) { hp -= x.danoInv; invPronto = ta + he.investida; }
+        else {
+          let q = x.danoInv > 0 ? invPronto : Infinity;
+          for (let i = 0; i < pronto.length; i++) if (x.danos[i] > 0 && pronto[i] < q) q = pronto[i];
+          if (!Number.isFinite(q)) return null;
+          ta = Math.max(ta, q);
+          continue;
+        }
+        golpes++;
+        prox = ta + he.intervalo;
+        if (hp > 0) ta = prox;
+      }
+      luta += ta - ini;
+      let tw = ini, tomou = 0, wInv = -Infinity;
+      const wPronto = x.golpesW.map(() => -Infinity);
+      while (tw <= ta) {
+        let g = -1, bd = 0;
+        for (let i = 0; i < x.golpesW.length; i++) if (wPronto[i] <= tw && x.golpesW[i].d > bd) { bd = x.golpesW[i].d; g = i; }
+        if (g >= 0) { tomou += bd; wPronto[g] = tw + x.golpesW[g].cd; } else if (wInv <= tw) { tomou += x.invW; wInv = tw + x.w.investida; }
+        tw += REGRAS.intervaloSelv;
+      }
+      tomado += tomou;
+      if (tomou > tomadoMax[p.ordem[k]]) tomadoMax[p.ordem[k]] = tomou;
+      t = ta + morto;
+    }
+    return { F: luta / p.N / 1000, golpes: golpes / p.N, risco: tomado / p.N / he.hp, morre: tomadoMax.some(v => v >= he.hp) };
+  }
+
+  // Segundos por abate num mapa em que quem mata de um golpe leva `s`: tempo morto + luta. Quem luta mais anda menos
+  // (o bando caminha até ele enquanto ele luta), e andando menos sobra menos recarga para a luta: as duas coisas se
+  // acertam num ponto fixo, resolvido como no site — a luta simulada nas duas pontas do tempo morto (o do mapa e o
+  // piso) e a reta entre elas no meio (a luta simulada anda aos saltos: o golpe forte está pronto ou não)
+  function porAbate(p, he, s) {
+    const a = lutar(p, he, s * 1000);
+    if (!a) return null;
+    const piso = tempoMorto(s, Infinity);
+    let F = a.F, b = a;
+    if (a.F > 0.02 && s - piso > 0.02) {
+      const ap = lutar(p, he, piso * 1000);
+      if (ap) {
+        const luta = m => a.F + (m - s) * (ap.F - a.F) / (piso - s);
+        let lo = piso, hi = s;
+        for (let i = 0; i < 30; i++) { const m = (lo + hi) / 2; if (tempoMorto(s, luta(m)) >= m) lo = m; else hi = m; }
+        F = luta((lo + hi) / 2);
+        if (s - tempoMorto(s, F) > tempoMorto(s, F) - piso) b = ap; // o dano e os golpes: os da ponta mais perto
+      }
+    }
+    return { seg: tempoMorto(s, F) + F, F, golpes: b.golpes, risco: b.risco, morre: a.morre || b.morre };
+  }
+
+  // O mapa da hunt pela tabela do site: as hunts de Johto em diante emprestam um mapa de Kanto ou da Outland
+  const mapaDa = slug => RIT.site?.hunts[slug] ?? (RIT.fontes.has(slug) ? slug : null);
+  const principal = h => h.especies.reduce((m, e) => (!m || e[1] > m[1] ? e : m), null)?.[0];
+
+  // O tempo por abate de quem mata de um golpe na hunt, a faixa dele e de onde veio: 'pokemon' (medido com ESTE pokémon
+  // nesta hunt), 'nosso' (medido pelas suas contas nesta hunt), 'mapa' (noutra hunt do mesmo mapa), 'site' (o mapa medido
+  // pelo PokéIdle Hub), 'bioma' (hunt que a tabela não conhece: o mapa que o jogo mais dá ao 1º tipo do selvagem
+  // principal, com a faixa aberta até a dos mapas, porque ~1 em 4 hunts foge do bioma), 'mediana' (mapa sem medida) ou
+  // 'padrao' (sem a tabela)
+  function tempoDoMapa(h) {
+    const T = RIT.site, mapa = mapaDa(h.slug), faixa = (s, r) => [s * (1 - r), s * (1 + r)];
+    if (op.ajustar && NOSSO) {
+      for (const [fonte, m] of [['pokemon', NOSSO.doPokemon.get(h.slug)], ['nosso', NOSSO.porHunt.get(h.slug)], ['mapa', NOSSO.porMapa.get(mapa || h.slug)]]) {
+        if (m) return { s: m.s, faixa: faixa(m.s, RITMO.ruido), fonte, mapa, med: m };
+      }
+    }
+    const m = mapa && T?.mapas[mapa];
+    if (m) return { s: m.s, faixa: faixa(m.s, m.indireto ? RITMO.ruidoInd : RITMO.ruido), fonte: 'site', mapa, indireto: !!m.indireto };
+    if (T && !mapa) {
+      const tipo = E[principal(h)]?.t?.[0], b = T.biomas[tipo], bm = b && T.mapas[b.mapa];
+      if (bm) return { s: bm.s, faixa: [Math.min(bm.s * (1 - RITMO.ruido), T.faixa.p10), Math.max(bm.s * (1 + RITMO.ruido), T.faixa.p90)], fonte: 'bioma', mapa: b.mapa, tipo, bioma: b };
+    }
+    if (T) return { s: T.faixa.mediana, faixa: [T.faixa.p10, T.faixa.p90], fonte: 'mediana', mapa };
+    return { s: RITMO.padraoS, faixa: [RITMO.padraoS, RITMO.padraoS], fonte: 'padrao', mapa: null };
+  }
+
+  // O ritmo medido na hunt atual vale com 20 abates e 3 minutos, do mesmo pokémon: ele entra no ritmo por mapa (ver
+  // `nossoRitmo`) e dele sai o bônus de XP e de ouro que a calculadora do jogo não conhece (Twitch, Kick, Sacrifício)
+  function medicao() {
+    const m = D.medido, a = D.ativo;
+    if (!m || m.slug !== D.huntSlug || m.pk !== a?.id || m.abates < 2) return null;
+    const n = m.abates - 1, ms = m.ultimo - m.inicio;
+    return { n, ms, kh: n / (ms / 3.6e6), xpPkH: m.xpPk / (ms / 3.6e6), ouroH: m.ouro / (ms / 3.6e6), xpPorAbate: m.xpPk / n, ouroPorAbate: m.ouro / n,
+      golpes: m.golpes > 0 ? m.golpes / n : null, vale: n >= 20 && ms >= 180000 };
+  }
+
+  // Uma corrida medida vira o tempo do mapa: o s em que o cálculo dá o tempo medido por abate, com a luta simulada do
+  // pokémon que mediu e o dia sazonal daquela hora (bissecção: o cálculo cresce com o s). Se nem com o mapa mais rápido
+  // o cálculo cabe no medido, a luta simulada desse pokémon não bate com a de verdade e a corrida não serve de régua
+  function sDaCorrida(c, h) {
+    const k = `${c.id}|${c.ultimo}|${c.abates}`;
+    if (cacheCorrida.has(k)) return cacheCorrida.get(k);
+    if (cacheCorrida.size > 400) cacheCorrida.clear();
+    let r = null;
+    const he = montarHeroi(c.heroi), p = preparar(h, he, c.saz || null);
+    if (!p.faltou) {
+      const med = (c.ultimo - c.inicio) / (c.abates - 1) / 1000, f = s => porAbate(p, he, s)?.seg ?? Infinity;
+      let lo = 1, hi = 15;
+      if (f(lo) <= med && f(hi) >= med) {
+        for (let i = 0; i < 22; i++) { const m = (lo + hi) / 2; if (f(m) < med) lo = m; else hi = m; }
+        const s = (lo + hi) / 2;
+        r = { s, golpes: c.golpes > 0 ? c.golpes / (c.abates - 1) : null, golpesSim: porAbate(p, he, s).golpes };
+      }
+    }
+    cacheCorrida.set(k, r);
+    return r;
+  }
+
+  // O nosso ritmo: as corridas das 4 contas (as 3 últimas de cada hunt, de 14 dias para cá) e a de agora, mais fresca
+  // que a guardada; a média pesa pelos abates. Só a corrida de quem mata de um golpe (até 1,4 golpe por abate, como o
+  // site aceita) mede o MAPA: aí o tempo é a caminhada e quase nada do cálculo entra, e ela vale para todo pokémon,
+  // nesta hunt e nas outras do mesmo mapa. Com mais golpes, o tempo do mapa que sai dela depende da luta simulada (um
+  // erro de 10% no medido vira ~20% no mapa): só vale para o mesmo pokémon na mesma hunt. Corrida com TM AoE não
+  // mede mapa nenhum (quantos caem por golpe depende do bando): ela acerta o rendimento do AoE (ver `calcular`)
+  const GOLPES_MAPA = 1.4;
+  function nossoRitmo() {
+    const hunts = new Map(D.hunts.map(h => [h.slug, h])), porHunt = new Map(), porMapa = new Map(), doPokemon = new Map();
+    let usadas = 0, fora = 0;
+    const idAgora = MED?.vale ? `${conta}:${D.medido.inicio}:${D.medido.slug}` : '';
+    const lista = RIT.corridas.filter(c => c.id !== idAgora && !c.heroi?.tmAoe);
+    if (idAgora && !D.ativo.tmAoe) lista.push({ id: idAgora, conta, ...D.medido, heroi: D.ativo });
+    for (const c of lista) {
+      const h = hunts.get(c.slug);
+      if (!h || !(c.abates >= 21) || !c.heroi?.stats) continue;
+      // Nem mede o mapa nem é deste pokémon: não entra (nem na conta das que ficaram de fora)
+      const gMed = c.golpes > 0 ? c.golpes / (c.abates - 1) : null, meu = c.conta === conta && c.pk != null && c.pk === D.ativo.id;
+      if (!meu && gMed > GOLPES_MAPA) continue;
+      const r = sDaCorrida(c, h);
+      if (!r) { fora++; continue; }
+      const deMapa = gMed != null ? gMed <= GOLPES_MAPA : r.golpesSim <= 1.05;
+      if (!deMapa && !meu) continue;
+      usadas++;
+      const n = c.abates - 1, soma = (m, chave) => {
+        const v = m.get(chave) || { sn: 0, n: 0, gn: 0, ng: 0, corridas: 0, hunts: new Set() };
+        v.sn += r.s * n; v.n += n; v.corridas++; v.hunts.add(c.slug);
+        if (r.golpes != null) { v.gn += r.golpes * n; v.ng += n; }
+        m.set(chave, v);
+      };
+      if (deMapa) { soma(porHunt, c.slug); soma(porMapa, mapaDa(c.slug) || c.slug); } else soma(doPokemon, c.slug);
+    }
+    for (const m of [porHunt, porMapa, doPokemon]) for (const v of m.values()) { v.s = v.sn / v.n; v.golpes = v.ng ? v.gn / v.ng : null; }
+    return { porHunt, porMapa, doPokemon, usadas, fora };
+  }
+
+  // A região como o mapa do jogo: a declarada, a Outland pela área, o resto pela geração com mais pontos de spawn
+  function regiaoDe(h) {
+    if (h.regiao) return h.regiao.charAt(0).toUpperCase() + h.regiao.slice(1);
+    if (h.area === 'outland') return 'Outland';
+    const peso = new Map();
+    for (const [id, pts] of h.especies) {
+      const dex = id <= 1025 ? id : id % 1000;
+      const g = FAIXAS.find(([a, b]) => dex >= a && dex <= b)?.[2];
+      if (g) peso.set(g, (peso.get(g) || 0) + pts);
+    }
+    let r = '', max = -1;
+    for (const [g, n] of peso) if (n > max) { r = g; max = n; }
+    return r;
+  }
+
+  function calcular() {
+    if (!E || !D?.hunts || !D.ativo?.stats) return;
+    const t0 = performance.now();
+    efCache = new Map();
+    selvCache = new Map();
+    H = montarHeroi(D.ativo);
+    const saz = op.sazonal ? D.sazonal?.tipo || null : null;
+    MED = medicao();
+    NOSSO = nossoRitmo();
+    R = D.hunts.map(h => {
+      const r = { h, regiao: regiaoDe(h), liberada: h.nivel <= D.nivel, atual: h.slug === D.huntSlug };
+      const p = preparar(h, H, saz);
+      if (p.faltou) return { ...r, faltou: true };
+      const mapa = tempoDoMapa(h), a = porAbate(p, H, mapa.s);
+      if (!a) return { ...r, mapa, naoDerruba: true };
+      const seg = s => tempoMorto(s, a.F) + a.F;
+      return { ...r, mapa, pior: p.pior, ...a, faixaSeg: [seg(mapa.faixa[0]), seg(mapa.faixa[1])] };
+    });
+    // Os bônus de XP e de ouro que a calculadora do jogo não conhece: os do ritmo medido na hunt atual. Com TM AoE cada
+    // golpe acerta os selvagens em volta, e quantos caem juntos depende do bando: com a medida, o quanto ele rende a mais
+    // que um alvo só sai dela (o mesmo fator em todas as hunts; 31/10, a Conta 1 de verdade rendia ×1,0, não os ×2 da
+    // estimativa); sem ela, vale a estimativa da pessoa. O tempo de cada abate divide por ele
+    let fXp = 1, fOuro = 1, aoe = D.ativo.tmAoe ? op.aoe : 1;
+    AJ = null;
+    const atual = R.find(r => r.atual && !r.faltou && !r.naoDerruba);
+    if (op.ajustar && MED?.vale && atual) {
+      const lim = v => Math.min(5, Math.max(0.2, v));
+      if (atual.h.xp > 0 && MED.xpPorAbate > 0) fXp = lim(MED.xpPorAbate / (atual.h.xp * D.multPk));
+      if (atual.h.ouro > 0 && MED.ouroPorAbate > 0) fOuro = lim(MED.ouroPorAbate / atual.h.ouro);
+      AJ = { fXp, fOuro };
+      if (D.ativo.tmAoe) aoe = AJ.aoe = Math.min(6, Math.max(0.5, atual.seg / (MED.ms / MED.n / 1000)));
+    }
+    for (const r of R) {
+      if (r.faltou || r.naoDerruba) continue;
+      r.kh = 3600 / (r.seg / aoe);
+      r.khFaixa = [3600 / (r.faixaSeg[1] / aoe), 3600 / (r.faixaSeg[0] / aoe)];
+      Object.assign(r, { xpPkH: r.h.xp * r.kh * D.multPk * fXp, xpTrH: r.h.xp * r.kh * D.multTr * fXp, ouroH: r.h.ouro * r.kh * fOuro });
+    }
+    $('calc').textContent = `${R.length} hunts · ${Math.round(performance.now() - t0)} ms · dados das ${new Date(D.em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+  }
+
+  // De onde veio o ritmo de uma linha (o título dos abates/h)
+  const estimado = r => ['bioma', 'mediana', 'padrao'].includes(r.mapa?.fonte);
+  function fonteTxt(r) {
+    const m = r.mapa;
+    if (!m || r.naoDerruba) return '';
+    const faixa = ` · faixa ${fmt(r.khFaixa[0])}–${fmt(r.khFaixa[1])} abates/h`;
+    const golpes = `${dec(r.golpes)} golpe${r.golpes >= 0.95 && r.golpes < 1.05 ? '' : 's'} por abate no cálculo`;
+    const nomes = s => [...s].map(x => D.hunts.find(h => h.slug === x)?.nome || x).join(', ');
+    const medida = `${m.med?.corridas} medição(ões), ${nv(m.med?.n)} abates${m.med?.golpes != null ? `, ${dec(m.med.golpes)} golpe(s) por abate medidos` : ''}`;
+    switch (m.fonte) {
+      case 'pokemon': return `Ritmo medido com este pokémon nesta hunt: ${medida} · ${golpes}`;
+      case 'nosso': return `Ritmo medido pelas suas contas nesta hunt: ${medida} · ${golpes}`;
+      case 'mapa': return `Ritmo medido pelas suas contas noutra hunt do mesmo mapa (${nomes(m.med.hunts)}; ${nv(m.med.n)} abates) · ${golpes}`;
+      case 'site': return `Ritmo do mapa ${m.mapa} medido pelo site PokéIdle Hub${m.indireto ? ' (com quase um golpe por abate; o golpe a mais foi descontado)' : ''} · ${golpes}${faixa}`;
+      case 'bioma': return `≈ Hunt ainda não medida: o mapa que o jogo costuma dar às hunts de ${TIPOS[m.tipo]?.[0] ?? m.tipo} (${m.mapa}, o de ${m.bioma.acertos} das ${m.bioma.de} hunts vistas pelo site) · ${golpes}${faixa}`;
+      case 'mediana': return `≈ Mapa${m.mapa ? ` ${m.mapa}` : ''} ainda não medido: a mediana dos mapas medidos · ${golpes}${faixa}`;
+      default: return `≈ Sem a tabela de ritmo do site: ${dec(RITMO.padraoS, 2)} s por abate para quem mata de um golpe · ${golpes}`;
+    }
+  }
+
+  function aviso(txt) { const a = $('aviso'); a.hidden = !txt; a.textContent = txt || ''; }
+
+  function linhaSazonal() {
+    const sz = D.sazonal;
+    if (!sz?.tipo) return '';
+    const ate = sz.fim ? ` (até as ${new Date(sz.fim).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })})` : '';
+    const efeito = H.tipos.includes(sz.tipo) ? 'o seu pokémon é desse tipo: causa o dobro de dano e leva um quarto'
+      : 'o seu pokémon não é desse tipo; os selvagens que forem causam o dobro de dano e levam um quarto';
+    return `<br><span class="mut">Dia sazonal${ate}:</span>${chipTipo(sz.tipo)}<span class="mut"> — ${efeito}${op.sazonal ? '' : ' (fora da conta: desmarcado abaixo)'}</span>`;
+  }
+  function linhaRitmo() {
+    const vis = R.filter(r => r.mapa && (r.liberada || r.atual)), quantas = (...f) => vis.filter(r => f.includes(r.mapa.fonte)).length;
+    const T = RIT.site, data = T?.geradoEm ? `${T.geradoEm.slice(8, 10)}/${T.geradoEm.slice(5, 7)}` : '';
+    const site = T ? `${quantas('site')} pela tabela do site PokéIdle Hub${data ? ` (de ${data})` : ''}`
+      : RIT.baixando ? 'baixando a tabela do site PokéIdle Hub…' : `sem a tabela do site PokéIdle Hub${RIT.erro ? ` (${esc(RIT.erro)})` : ''}`;
+    const fora = NOSSO?.fora ? ` · <span title="Medições em que a luta simulada do pokémon não cabe no tempo medido (ele bate diferente do que o cálculo acha): ficam de fora">${NOSSO.fora} medição(ões) não usada(s)</span>` : '';
+    return `<br><span class="mut">Ritmo das ${vis.length} hunts liberadas: ${quantas('pokemon', 'nosso', 'mapa')} pelo que as suas contas mediram · ${site} · ${quantas('bioma', 'mediana', 'padrao')} estimadas (≈)${fora}</span>`;
+  }
+
+  function render() {
+    for (const b of $('contas').children) b.classList.toggle('on', Number(b.dataset.i) === conta);
+    if (!E) return aviso('Esperando o catálogo de espécies do app (na primeira vez ele lê os dados do jogo, uns segundos)…');
+    if (!D) return aviso(`Lendo a ${NOMES[conta] || 'conta'}…`);
+    if (D.erro) return aviso(`${NOMES[conta] || 'Conta'}: ${D.erro}.`);
+    if (!D.ativo) return aviso(`${NOMES[conta] || 'Conta'}: nenhum pokémon em campo agora.`);
+    if (!D.ativo.stats) return aviso('O jogo não mandou os stats do pokémon em campo; tente Recalcular daqui a pouco.');
+    if (!R) return aviso('Calculando…');
+    const semEsp = !E[D.ativo.speciesId];
+    aviso(semEsp ? 'A espécie do pokémon em campo não está no catálogo do app: os golpes dele ficaram de fora (só a Investida).' : '');
+
+    // O pokémon em campo
+    const a = D.ativo, esp = E[a.speciesId];
+    const melhorGolpe = [...H.golpes].sort((x, y) => y.poder - x.poder)[0];
+    const p = $('poke');
+    p.hidden = false;
+    p.innerHTML = `<span class="nome">${a.shiny ? '✨ ' : ''}${esc(a.nome || esp?.n || 'Pokémon')}</span> <span class="mut">Nv ${nv(a.level)}</span>${H.tipos.map(chipTipo).join('')}
+      <span class="mut"> · P${esc(a.potencia ?? '?')} · qualidade ${esc(a.quality != null ? Number(a.quality).toLocaleString('pt-BR', { maximumFractionDigits: 3 }) : '?')} · IV de SPD ${esc(H.iv)}${a.zmove ? ` · Z-Move ${esc(TIPOS[a.zmove.type]?.[0] ?? a.zmove.type)}` : ''}${a.tmAoe ? ' · TM AoE' : ''}</span><br>
+      <span class="mut">ATK ${fmt(H.atk)} · SP.ATK ${fmt(H.spAtk)} · DEF ${fmt(H.def)} · SP.DEF ${fmt(H.spDef)} · HP de combate ${fmt(H.hp)} · ${H.golpes.length} golpes${melhorGolpe ? ` (o mais forte: ${esc(melhorGolpe.nome)}, poder ${fmt(melhorGolpe.poder)})` : ''}</span><br>
+      <span class="mut">Treinador Nv ${nv(D.nivel)} · XP do pokémon ×${D.multPk.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} e do treinador ×${D.multTr.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} (VIP, boosts e guild)</span>${linhaSazonal()}${linhaRitmo()}`;
+    $('rotAoe').hidden = !a.tmAoe;
+    $('aoe').value = String(op.aoe);
+    $('aoe').hidden = !!AJ?.aoe;
+    $('aoeMed').textContent = AJ?.aoe ? `rende ×${dec(AJ.aoe, 2)} um alvo só (medido nesta hunt)` : '';
+
+    // As que valem para ele: liberadas e sem cair
+    const liberadas = R.filter(r => !r.faltou && !r.naoDerruba && !r.morre && r.liberada);
+    const seguras = liberadas.filter(r => !arriscada(r));
+    const validas = seguras.length ? seguras : liberadas;
+    const atual = R.find(r => r.atual);
+    const top = k => [...validas].sort((x, y) => y[k] - x[k])[0];
+    const mXp = top('xpPkH'), mOuro = top('ouroH');
+    const ganho = (m, k) => (atual && !atual.naoDerruba && !atual.faltou && atual[k] > 0 && m !== atual ? ` <span class="ganho">+${pct(m[k] / atual[k] - 1)}</span>` : '');
+    const cartao = (rot, r, k, extra = '') => `<div class="card${extra}"><span class="mut">${rot}</span>
+      <b class="grande">${r ? esc(r.h.nome) : '—'} <span class="mut">${r ? `Nv ${nv(r.h.nivel)}` : ''}</span></b>
+      ${r && !r.naoDerruba && !r.faltou ? `<span>${fmt(r.xpPkH)} XP/h${k === 'xpPkH' ? ganho(r, k) : ''}</span> · <span class="coin">${fmt(r.ouroH)} ouro/h</span>${k === 'ouroH' ? ganho(r, k) : ''}<br><span class="mut"><span title="${esc(fonteTxt(r))}">${estimado(r) ? '≈' : ''}${fmt(r.kh)} abates/h</span> · risco ${pct(r.risco)} · pior golpe ${pct(r.pior)}</span>` : `<span class="mut">${r?.naoDerruba ? 'ele não consegue derrubar estes selvagens' : r?.faltou ? 'espécie da hunt fora do catálogo do app' : D.noCentro ? 'no Centro Pokémon' : 'fora de hunt (ou hunt fora da lista)'}</span>`}</div>`;
+    $('reco').innerHTML = cartao('Agora', atual, '') + cartao('Melhor para XP do pokémon', mXp, 'xpPkH', ' melhor') + cartao('Melhor para ouro', mOuro, 'ouroH', ' melhor');
+    // O ritmo de verdade nesta hunt, ao lado da estimativa
+    if (atual) {
+      const min = MED ? Math.round(MED.ms / 60000) : 0;
+      const med = document.createElement('div');
+      med.className = 'mut';
+      const usada = ['pokemon', 'nosso'].includes(atual.mapa?.fonte) || !!AJ?.aoe, calc = !atual.naoDerruba && !atual.faltou ? ` (o cálculo: ${dec(atual.golpes)})` : '';
+      med.textContent = !MED ? 'Medindo o ritmo de verdade nesta hunt (a partir do próximo abate).'
+        : `Medido: ${fmt(MED.kh)} abates/h${MED.golpes != null ? ` · ${dec(MED.golpes)} golpe(s) por abate${calc}` : ''} · ${fmt(MED.xpPkH)} XP/h (${MED.n} abates em ${min} min)`
+          + (!MED.vale ? ' · com 3 min e 20 abates, a lista passa a usar esta medida' : !op.ajustar ? '' : usada ? ' · a lista usa esta medida'
+            : ' · não deu para usar: a luta simulada não cabe no tempo medido');
+      $('reco').firstElementChild.append(med);
+    }
+    $('rotAjustar').hidden = !(MED?.vale || NOSSO?.usadas);
+    $('ajustar').checked = op.ajustar;
+    $('rotSazonal').hidden = !D.sazonal?.tipo;
+    $('sazonal').checked = op.sazonal;
+
+    // A tabela
+    $('filtros').hidden = false;
+    for (const b of $('ordem').querySelectorAll('button')) b.classList.toggle('on', b.dataset.o === op.ordem);
+    $('soLiberadas').checked = op.soLiberadas;
+    $('semMorte').checked = op.semMorte;
+    $('semRisco').checked = op.semRisco;
+    const busca = op.busca.trim().toLowerCase();
+    const linhas = R.filter(r => !r.faltou
+      && (!op.soLiberadas || r.liberada || r.atual)
+      && (!op.semMorte || !(r.morre || r.naoDerruba) || r.atual)
+      && (!op.semRisco || !arriscada(r) || r.atual)
+      && (!busca || r.h.nome.toLowerCase().includes(busca) || r.regiao.toLowerCase().includes(busca)))
+      .sort((x, y) => (y[op.ordem] || 0) - (x[op.ordem] || 0));
+    const corpo = $('tabela').querySelector('tbody');
+    corpo.innerHTML = linhas.slice(0, op.mostrar).map((r, n) => {
+      const selos = (r.atual ? '<span class="selo atual">agora</span>' : '') + (!r.liberada ? '<span class="selo tranca">trancada</span>' : '')
+        + (r.naoDerruba ? '<span class="selo morre">não derruba</span>' : r.morre ? '<span class="selo morre">morre</span>' : arriscada(r) ? '<span class="selo risco">arriscada</span>' : '');
+      const cls = r.morre ? 'risco-mata' : arriscada(r) ? 'risco-alto' : 'risco-ok';
+      return `<tr class="${r.atual ? 'atual' : ''}${r.liberada ? '' : ' trancada'}"><td class="mut">${n + 1}</td><td>${esc(r.h.nome)} <span class="mut">Nv ${nv(r.h.nivel)}</span>${selos}</td>
+        <td class="mut">${esc(r.regiao)}</td>${r.naoDerruba ? '<td class="r mut" colspan="4">ele não consegue derrubar estes selvagens</td>'
+          : `<td class="r">${fmt(r.xpPkH)}</td><td class="r">${fmt(r.xpTrH)}</td><td class="r coin">${fmt(r.ouroH)}</td><td class="r${estimado(r) ? ' mut' : ''}" title="${esc(fonteTxt(r))}">${estimado(r) ? '≈' : ''}${fmt(r.kh)}</td>`}
+        <td class="r ${cls}">${r.naoDerruba ? '—' : `${pct(r.risco)} · ${pct(r.pior)}`}</td></tr>`;
+    }).join('') || '<tr><td colspan="8" class="mut">Nenhuma hunt com esses filtros.</td></tr>';
+    $('tabela').hidden = false;
+    $('mais').hidden = linhas.length <= op.mostrar;
+    $('mais').textContent = `Mostrar mais (${linhas.length - op.mostrar} restantes)`;
+  }
+
+  function pedir() {
+    D = null; R = null;
+    render();
+    api.huCalcular(conta);
+    clearTimeout(timer);
+    timer = setTimeout(pedir, 120000); // o pokémon sobe de nível e troca de hunt: refaz de 2 em 2 min com a janela aberta
+  }
+
+  for (const b of $('ordem').querySelectorAll('button')) b.onclick = () => { op.ordem = b.dataset.o; op.mostrar = 40; render(); };
+  $('soLiberadas').onchange = e => { op.soLiberadas = e.target.checked; render(); };
+  $('semMorte').onchange = e => { op.semMorte = e.target.checked; render(); };
+  $('semRisco').onchange = e => { op.semRisco = e.target.checked; render(); };
+  $('aoe').onchange = e => { op.aoe = Number(e.target.value) || 1; calcular(); render(); };
+  $('ajustar').onchange = e => { op.ajustar = e.target.checked; calcular(); render(); };
+  $('sazonal').onchange = e => { op.sazonal = e.target.checked; calcular(); render(); };
+  $('busca').oninput = e => { op.busca = e.target.value; op.mostrar = 40; render(); };
+  $('mais').onclick = () => { op.mostrar += 60; render(); };
+  $('recalc').onclick = pedir;
+
+  api.onHuInicio(s => {
+    NOMES = s.nomes || [];
+    conta = Number(s.ativa) || 0;
+    $('contas').replaceChildren(...NOMES.map((n, i) => {
+      const b = document.createElement('button');
+      b.dataset.i = i;
+      b.textContent = n;
+      b.onclick = () => { conta = i; pedir(); };
+      return b;
+    }));
+    pedir();
+  });
+  api.onHuJogo(j => { E = j?.especies || null; if (D && !D.erro) { calcular(); } render(); });
+  api.onHuDados(m => {
+    if (m.conta !== conta) return;
+    D = m.d;
+    R = null;
+    if (!D?.erro) calcular();
+    render();
+  });
+  api.onHuRitmo(s => {
+    RIT = { ...RIT, ...s, corridas: Array.isArray(s?.corridas) ? s.corridas : [], fontes: new Set(s?.site?.fontes || []) };
+    if (D && !D.erro && R) { calcular(); render(); }
+  });
+</script>
+</body>
+</html>

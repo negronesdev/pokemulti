@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Caixa do projeto</title>
+<style>
+  :root { --bg:#151515; --box:#1f1f23; --linha:#2a2a30; --fg:#eee; --mut:#9a9a9a; --ok:#3fb950;
+    --azul:#3987e5; --laranja:#d95926; --laranja2:#8f3a17;
+    --n-amarelo:#e3b341; --n-laranja:#f0883e; --n-vermelho:#f0544f; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:13px system-ui, "Segoe UI", sans-serif; }
+  body { display:flex; flex-direction:column; }
+  header { display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid var(--linha); flex-wrap:wrap; }
+  header b { font-size:15px; }
+  .mut { color:var(--mut); font-size:12px; }
+  .sp { flex:1; }
+  main { flex:1; overflow-y:auto; padding:12px; }
+  .nota { background:#1a2430; border:1px solid #23415a; border-radius:8px; padding:9px 12px; line-height:1.55; margin-bottom:12px; }
+  .nota b { color:#fff; }
+  .link { color:#79b8ff; cursor:pointer; }
+  .link:hover { text-decoration:underline; }
+  .chip { font-size:12px; padding:2px 8px; border-radius:5px; background:#1d3322; color:#9be3a9; white-space:nowrap; }
+  .chip.amarelo { background:#3a3016; color:#f2d67b; }
+  .chip.laranja { background:#3a2614; color:#ffc58f; }
+  .chip.vermelho { background:#3a1f1f; color:#ffb3ae; }
+  .chip.cinza { background:#26262c; color:var(--mut); }
+  button { height:28px; padding:0 10px; border-radius:6px; border:1px solid #3a3a42; background:#26262c; color:var(--fg); cursor:pointer; font:inherit; }
+  button:hover:not(:disabled) { background:#32323a; }
+  button:disabled { opacity:.45; cursor:default; }
+  .liga { display:flex; align-items:center; gap:6px; cursor:pointer; }
+  input[type=checkbox] { width:15px; height:15px; accent-color:#6b3fd6; cursor:pointer; margin:0; }
+  .erro { background:#3a1f1f; border:1px solid #5a2a2a; color:#ffb3ae; border-radius:8px; padding:8px 12px; margin-bottom:12px; line-height:1.5; }
+  .erro:empty { display:none; }
+  .kpis, .painel { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:8px; }
+  .kpi { background:var(--box); border:1px solid var(--linha); border-radius:10px; padding:9px 12px; min-width:0; }
+  .kpi .t { font-size:11px; color:var(--mut); text-transform:uppercase; letter-spacing:.04em; }
+  .kpi .v { font-size:20px; font-weight:600; margin-top:3px; font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .kpi .s { font-size:12px; color:var(--mut); margin-top:2px; font-variant-numeric:tabular-nums; }
+  .sobe { color:#7ee787; }
+  .desce { color:#ffb3ae; }
+  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--mut); margin:18px 0 6px; font-weight:600; }
+  table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
+  th { text-align:left; font-size:11px; font-weight:600; color:var(--mut); padding:0 8px 4px; }
+  td { padding:5px 8px; border-top:1px solid var(--linha); vertical-align:top; }
+  td.num { text-align:right; white-space:nowrap; }
+  td.q { white-space:nowrap; color:var(--mut); }
+  td.st { width:22px; padding-right:0; }
+  #regras td:nth-child(4) { color:var(--mut); }
+  #regras tr.amarelo b { color:#f2d67b; }
+  #regras tr.laranja b { color:#ffc58f; }
+  #regras tr.vermelho b { color:#ffb3ae; }
+  .bola { display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--ok); }
+  .bola.amarelo { background:var(--n-amarelo); }
+  .bola.laranja { background:var(--n-laranja); }
+  .bola.vermelho { background:var(--n-vermelho); }
+  .graf { position:relative; background:var(--box); border:1px solid var(--linha); border-radius:10px; padding:6px 4px 2px; }
+  .graf svg { display:block; width:100%; }
+  .legenda { display:flex; gap:14px; font-size:12px; color:var(--mut); margin:0 0 6px 2px; }
+  .legenda i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:-1px; }
+  .dica { position:fixed; pointer-events:none; background:#0d0d10; border:1px solid #3a3a42; border-radius:7px; padding:7px 9px; font-size:12px;
+    line-height:1.55; display:none; z-index:9; font-variant-numeric:tabular-nums; max-width:320px; }
+  .dica b { color:#fff; }
+  .vazio { color:var(--mut); padding:6px 2px; }
+  #alertas div { border-top:1px solid var(--linha); padding:5px 2px; line-height:1.5; }
+  .rodape { margin-top:18px; line-height:1.6; }
+</style>
+</head>
+<body>
+<header>
+  <b>🏦 Caixa do projeto</b>
+  <span id="chip" class="chip cinza">carregando…</span>
+  <span id="quando" class="mut"></span>
+  <span class="sp"></span>
+  <label class="liga" title="Aviso do Windows quando um alarme tocar (o registro abaixo guarda todos)"><input type="checkbox" id="avisos"> Avisar no Windows</label>
+  <label class="liga" title="Desligado, o app não lê a rede nem o painel do jogo"><input type="checkbox" id="ligado"> Monitor ligado</label>
+  <button id="agora">Verificar agora</button>
+</header>
+<main>
+  <div class="nota" id="nota"></div>
+  <div class="erro" id="erro"></div>
+  <section class="kpis" id="kpis"></section>
+  <h2>Alarmes</h2>
+  <table id="regras"></table>
+  <h2>Caixa no fim de cada dia · US$</h2>
+  <div class="graf" id="g1"></div>
+  <h2>Entradas e saídas por dia · últimos 30 dias · US$</h2>
+  <div class="legenda" id="leg2"></div>
+  <div class="graf" id="g2"></div>
+  <h2>Painel de Gemas do jogo</h2>
+  <div id="painel"></div>
+  <h2>Saídas que não são saque (e o SOL da carteira)</h2>
+  <table id="eventos"></table>
+  <h2>Maiores saques</h2>
+  <table id="maiores"></table>
+  <h2>Registro dos avisos</h2>
+  <div id="alertas"></div>
+  <p class="mut rodape" id="rodape"></p>
+</main>
+<div class="dica" id="dica"></div>
+<script>
+  const $ = id => document.getElementById(id);
+  const ORD = { '': 0, amarelo: 1, laranja: 2, vermelho: 3 };
+  const NOME_NIVEL = { amarelo: 'aviso', laranja: 'atenção', vermelho: 'alarme' };
+  let S = null;
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const usd = v => (v == null ? '—' : 'US$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  const mil = v => (v >= 1000 ? (v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: v >= 1e4 ? 0 : 1 }) + ' mil' : String(Math.round(v)));
+  const pct = v => (v >= 0 ? '+' : '−') + Math.abs(v * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%';
+  const sol = v => Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 4 });
+  const dt = ms => new Date(ms).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '');
+  const dia = d => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
+  const ha = ms => {
+    const m = (Date.now() - ms) / 60000;
+    if (m < 1) return 'agora';
+    if (m < 60) return `há ${Math.round(m)} min`;
+    if (m < 2880) return `há ${(m / 60).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} h`;
+    return `há ${Math.round(m / 1440)} dias`;
+  };
+  const curto = x => (x.length > 12 ? `${x.slice(0, 4)}…${x.slice(-4)}` : x);
+  const enderecos = s => String(s || '').split(', ').filter(Boolean).map(x => `<span class="link" data-conta="${esc(x)}" title="${esc(x)}">${esc(curto(x))}</span>`).join(', ');
+  const ver = sig => (sig ? `<span class="link" data-tx="${esc(sig)}" title="Abrir a transação no Solscan">ver ↗</span>` : '');
+  const passoBonito = x => { const p = 10 ** Math.floor(Math.log10(x || 1)); for (const k of [1, 2, 2.5, 5, 10]) if (k * p >= x) return k * p; return 10 * p; };
+
+  // ---------- dica do mouse ----------
+  const dica = $('dica');
+  function mostrarDica(e, html) {
+    dica.innerHTML = html;
+    dica.style.display = 'block';
+    const r = dica.getBoundingClientRect();
+    let x = e.clientX + 14, y = e.clientY + 14;
+    if (x + r.width > innerWidth - 8) x = e.clientX - r.width - 14;
+    if (y + r.height > innerHeight - 8) y = e.clientY - r.height - 14;
+    dica.style.left = x + 'px';
+    dica.style.top = y + 'px';
+  }
+  const esconderDica = () => { dica.style.display = 'none'; };
+
+  // Os dias do caixa: [dia, entradas, n, saques, n, manual, n, trocas, caixa no fim do dia]. Dia sem transação repete o caixa de antes
+  function diasComCaixa(dias) {
+    let ult = null;
+    return dias.map(d => { if (d[8] != null) ult = d[8]; return { d: d[0], v: ult ?? 0, ent: d[1], nEnt: d[2], saq: d[3], nSaq: d[4], man: d[5], nMan: d[6], troca: d[7] }; });
+  }
+  function textoDia(p) {
+    return `<b>${dia(p.d)}/${p.d.slice(0, 4)}</b><br>Caixa no fim do dia: <b>${usd(p.v)}</b><br>Entradas: ${usd(p.ent)} (${p.nEnt} recolhas)<br>Saques: ${usd(p.saq)} (${p.nSaq})` +
+      (p.man ? `<br>Saída manual: <b>${usd(p.man)}</b> (${p.nMan})` : '') + (p.troca ? `<br>Troca por SOL: ${usd(p.troca)}` : '');
+  }
+  function eixoY(topo, passo, W, m, Y) {
+    let g = '';
+    for (let v = 0; v <= topo + 1e-9; v += passo) {
+      g += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="#2c2c33" stroke-width="1"/>` +
+        `<text x="${m.l - 8}" y="${Y(v) + 4}" text-anchor="end" fill="#8b8b93" font-size="11">${v ? mil(v) : '0'}</text>`;
+    }
+    return g;
+  }
+
+  // ---------- gráfico 1: o caixa no fim de cada dia ----------
+  function grafCaixa(el, P) {
+    const n = P.length;
+    if (!n) { el.innerHTML = '<div class="vazio">Sem dados ainda.</div>'; return; }
+    const W = Math.max(360, el.clientWidth - 8), H = 230, m = { l: 52, r: 14, t: 12, b: 26 };
+    const passo = passoBonito(Math.max(...P.map(p => p.v), 1) / 4), topo = Math.ceil(Math.max(...P.map(p => p.v), 1) / passo) * passo;
+    const X = i => m.l + (n === 1 ? 0 : i / (n - 1)) * (W - m.l - m.r), Y = v => m.t + (1 - v / topo) * (H - m.t - m.b);
+    let g = eixoY(topo, passo, W, m, Y);
+    P.forEach((p, i) => {
+      if (i === 0 || p.d.endsWith('-01')) g += `<text x="${X(i)}" y="${H - 8}" text-anchor="${i === 0 ? 'start' : 'middle'}" fill="#8b8b93" font-size="11">${dia(p.d)}</text>`;
+    });
+    const linha = P.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(p.v).toFixed(1)}`).join('');
+    // As saídas manuais aparecem como um ponto na linha (raras: no histórico, 3 em 86 dias)
+    const marcas = P.map((p, i) => (p.man ? `<circle cx="${X(i)}" cy="${Y(p.v)}" r="4" fill="#f0544f" stroke="#1f1f23" stroke-width="2"/>` : '')).join('');
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" height="${H}">
+      <defs><linearGradient id="gc" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#3987e5" stop-opacity=".25"/><stop offset="1" stop-color="#3987e5" stop-opacity="0"/></linearGradient></defs>
+      ${g}<path d="${linha}L${X(n - 1).toFixed(1)},${Y(0)}L${X(0).toFixed(1)},${Y(0)}Z" fill="url(#gc)"/>
+      <path d="${linha}" fill="none" stroke="#3987e5" stroke-width="2" stroke-linejoin="round"/>${marcas}
+      <line class="cx" y1="${m.t}" y2="${H - m.b}" stroke="#6b6b75" stroke-width="1" stroke-dasharray="3 3" visibility="hidden"/>
+      <circle class="cp" r="4.5" fill="#3987e5" stroke="#1f1f23" stroke-width="2" visibility="hidden"/>
+      <rect class="alvo" x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${H - m.t - m.b}" fill="transparent"/></svg>`;
+    const svg = el.querySelector('svg'), cx = svg.querySelector('.cx'), cp = svg.querySelector('.cp');
+    svg.querySelector('.alvo').onmousemove = e => {
+      const r = svg.getBoundingClientRect(), x = (e.clientX - r.left) * (W / r.width);
+      const i = Math.max(0, Math.min(n - 1, Math.round(((x - m.l) / (W - m.l - m.r)) * (n - 1))));
+      cx.setAttribute('x1', X(i)); cx.setAttribute('x2', X(i)); cx.setAttribute('visibility', 'visible');
+      cp.setAttribute('cx', X(i)); cp.setAttribute('cy', Y(P[i].v)); cp.setAttribute('visibility', 'visible');
+      mostrarDica(e, textoDia(P[i]));
+    };
+    svg.querySelector('.alvo').onmouseleave = () => { cx.setAttribute('visibility', 'hidden'); cp.setAttribute('visibility', 'hidden'); esconderDica(); };
+  }
+
+  // ---------- gráfico 2: entradas × saídas por dia (30 dias) ----------
+  function barra(x, y, w, h, cor) {
+    if (h < 0.5) return '';
+    const r = Math.min(3, w / 2, h);
+    return `<path d="M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z" fill="${cor}"/>`;
+  }
+  function grafFluxo(el, P) {
+    const n = P.length;
+    if (!n) { el.innerHTML = '<div class="vazio">Sem dados ainda.</div>'; return; }
+    const outras = P.some(p => p.man || p.troca);
+    $('leg2').innerHTML = `<span><i style="background:var(--azul)"></i>Entradas (recolhas de depósito)</span><span><i style="background:var(--laranja)"></i>Saques de jogadores</span>` +
+      (outras ? `<span><i style="background:var(--laranja2)"></i>Outras saídas (manual e troca)</span>` : '');
+    const W = Math.max(360, el.clientWidth - 8), H = 200, m = { l: 52, r: 14, t: 10, b: 26 };
+    const max = Math.max(1, ...P.map(p => Math.max(p.ent, p.saq + p.man + p.troca)));
+    const passo = passoBonito(max / 4), topo = Math.ceil(max / passo) * passo;
+    const Y = v => m.t + (1 - v / topo) * (H - m.t - m.b), alt = v => (v / topo) * (H - m.t - m.b);
+    const gw = (W - m.l - m.r) / n, bw = Math.max(2, Math.min(14, (gw - 6) / 2));
+    let g = eixoY(topo, passo, W, m, Y), alvos = '';
+    P.forEach((p, i) => {
+      const x0 = m.l + i * gw + (gw - (2 * bw + 2)) / 2, base = Y(0);
+      g += barra(x0, base - alt(p.ent), bw, alt(p.ent), '#3987e5');
+      // saques embaixo e as outras saídas por cima, separadas por 2 px da cor do fundo
+      const hs = alt(p.saq), ho = alt(p.man + p.troca);
+      if (ho >= 0.5) {
+        g += `<rect x="${x0 + bw + 2}" y="${base - hs}" width="${bw}" height="${hs}" fill="#d95926"/>`;
+        g += barra(x0 + bw + 2, base - hs - ho - 2, bw, ho, '#8f3a17');
+      } else g += barra(x0 + bw + 2, base - hs, bw, hs, '#d95926');
+      if (i % 5 === (n - 1) % 5) g += `<text x="${m.l + (i + 0.5) * gw}" y="${H - 8}" text-anchor="middle" fill="#8b8b93" font-size="11">${dia(p.d)}</text>`;
+      alvos += `<rect data-i="${i}" x="${m.l + i * gw}" y="${m.t}" width="${gw}" height="${H - m.t - m.b}" fill="transparent"/>`;
+    });
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" height="${H}">${g}<rect class="sel" y="${m.t}" height="${H - m.t - m.b}" width="${gw}" fill="#ffffff" opacity=".05" visibility="hidden"/>${alvos}</svg>`;
+    const svg = el.querySelector('svg'), sel = svg.querySelector('.sel');
+    svg.querySelectorAll('rect[data-i]').forEach(r => {
+      r.onmousemove = e => { const i = +r.dataset.i; sel.setAttribute('x', m.l + i * gw); sel.setAttribute('visibility', 'visible'); mostrarDica(e, textoDia(P[i])); };
+      r.onmouseleave = () => { sel.setAttribute('visibility', 'hidden'); esconderDica(); };
+    });
+  }
+
+  function kpi(t, v, s) { return `<div class="kpi"><div class="t">${t}</div><div class="v">${v}</div><div class="s">${s || '&nbsp;'}</div></div>`; }
+  const variacao = (v, txt) => (v == null ? '' : `<span class="${v >= 0 ? 'sobe' : 'desce'}">${pct(v)}</span> ${txt}`);
+
+  function render() {
+    const s = S;
+    if (!s) return;
+    const R = s.resumo;
+    $('ligado').checked = s.ligado;
+    $('avisos').checked = s.avisos;
+    $('agora').disabled = s.lendo;
+    $('agora').textContent = s.lendo ? 'Lendo a rede…' : 'Verificar agora';
+    const valendo = s.regras.filter(r => r.nivel), pior = valendo.reduce((a, r) => (ORD[r.nivel] > ORD[a] ? r.nivel : a), '');
+    const chip = $('chip');
+    chip.className = 'chip ' + (!s.ligado ? 'cinza' : pior);
+    chip.textContent = !s.ligado ? 'monitor desligado' : valendo.length ? `${valendo.length} ${valendo.length > 1 ? 'alarmes valendo' : 'alarme valendo'}` : 'tudo normal';
+    $('quando').textContent = s.lendo ? 'lendo as transações novas…' : (s.verificadoEm ? `verificado ${ha(s.verificadoEm)}` : 'ainda não verificado') +
+      (s.ligado && s.proximaEm > Date.now() ? ` · a próxima em ${Math.max(1, Math.round((s.proximaEm - Date.now()) / 60000))} min` : '') +
+      (s.fila ? ` · ${s.fila} transações na fila` : '');
+    $('nota').innerHTML = `<b>A carteira do projeto na rede Solana</b> (${enderecos(s.carteira)} ↗): os depósitos dos jogadores são recolhidos para ela, e os saques saem dela. ` +
+      `A cada 10 min o app lê as transações novas (dados públicos, só leitura) e separa o <b>saque de jogador</b> (leva o número do pedido de saque), ` +
+      `a <b>troca por SOL</b> (paga as taxas da rede) e a <b>saída manual</b> (sem número de pedido: dinheiro saindo por outro motivo). O app avisa; a decisão de sacar é sua.`;
+    $('erro').textContent = s.erro ? `A última leitura da rede falhou: ${s.erro}. O app tenta de novo sozinho.` : '';
+
+    $('kpis').innerHTML = [
+      kpi('Em caixa', usd(R.usdt), [variacao(R.var24, 'em 24 h'), variacao(R.var7, 'em 7 dias')].filter(Boolean).join(' · ')),
+      kpi('SOL para as taxas', R.sol == null ? '—' : `${R.sol.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} SOL`, `aviso abaixo de ${s.lim.sol} SOL`),
+      kpi('Saques em 24 h', String(R.nSaq24), `${usd(R.saq24)}${R.media14 != null ? ` · média de ${Math.round(R.media14)}/dia` : ''}`),
+      kpi('Entradas em 24 h', usd(R.rec24), `${R.nRec24} recolhas de depósito`),
+      kpi('Última recolha', s.ultimaRecolha ? ha(s.ultimaRecolha) : '—', s.ultimaRecolha ? dt(s.ultimaRecolha) : ''),
+      kpi('Último saque pago', s.ultimoSaque ? ha(s.ultimoSaque) : '—', s.ultimoSaque ? dt(s.ultimoSaque) : '')
+    ].join('');
+
+    $('regras').innerHTML = '<tr><th></th><th>Alarme</th><th>Agora</th><th>Quando toca</th></tr>' + s.regras.map(r =>
+      `<tr class="${r.nivel || ''}"><td class="st"><span class="bola ${r.nivel || ''}" title="${r.nivel ? NOME_NIVEL[r.nivel] : 'normal'}"></span></td>` +
+      `<td><b>${esc(r.nome)}</b></td><td>${esc(r.valor)}</td><td>${esc(r.limite)}</td></tr>`).join('');
+
+    const P = diasComCaixa(s.dias);
+    grafCaixa($('g1'), P);
+    grafFluxo($('g2'), P.slice(-30));
+
+    const p = s.painel, emUsdt = p?.taxas != null ? p.taxas - (p.taxasUsadas || 0) : null;
+    $('painel').innerHTML = p ? `<div class="painel">${[
+      kpi('Arrecadado', usd(p.arrecadado), 'depósitos, segundo o jogo'),
+      kpi('Sacado pelos jogadores', usd(p.sacado), ''),
+      kpi('Taxas do Mercado', usd(p.taxas), [p.taxasUsadas ? `usadas: ${usd(p.taxasUsadas)}` : '', emUsdt != null ? `ainda em USDT: ${usd(emUsdt)}` : ''].filter(Boolean).join('<br>')),
+      kpi('Em caixa, segundo o jogo', usd(p.emCaixa), R.usdt != null ? `na rede: ${usd(R.usdt)}` : ''),
+      kpi('Aguardando recolha', usd(p.aguardando ?? 0), 'depósitos ainda nos endereços dos jogadores')
+    ].join('')}</div>` +
+      // O "Em caixa" do jogo não é o saldo da rede: ele já tira as taxas do Mercado que ainda estão em USDT
+      (emUsdt ? `<p class="mut">Por que o "em caixa" do jogo é menor que o saldo da rede: o jogo conta à parte as taxas do Mercado (a comissão queimada nas vendas em gemas). ` +
+        `O que delas ainda está em USDT (${usd(emUsdt)}) fica na carteira, mas sai do "em caixa" dele. Segundo o próprio jogo, essas taxas viram SOL para pagar as taxas da rede nos depósitos e saques.</p>` : '') +
+      `<p class="mut">Conferido ${ha(p.em)} pela Conta 1${p.carteira && p.carteira !== s.carteira ? ` · <b style="color:#ffc58f">o jogo mostra OUTRA carteira: ${enderecos(p.carteira)}</b>` : ''}` +
+      `${s.painelErro ? ` · última tentativa: ${esc(s.painelErro)}` : ''}.</p>`
+      : `<div class="vazio">A Conta 1 ainda não leu o painel de Gemas do jogo. Ela confere de hora em hora, quando a tela de gemas e a loja estão fechadas.${s.painelErro ? ` Última tentativa: ${esc(s.painelErro)}.` : ''}</div>`;
+
+    const TIPO = { manual: 'Saída manual', troca: 'Troca por SOL', permissao: 'Permissão da conta de USDT' };
+    $('eventos').innerHTML = s.eventos.length ? '<tr><th>Quando</th><th>O quê</th><th style="text-align:right">Valor</th><th>De / para</th><th>Observação</th><th></th></tr>' + s.eventos.map(e => {
+      const tipo = e.tipo === 'sol' ? (e.sol > 0 ? 'Entrada de SOL' : 'Saída de SOL') : TIPO[e.tipo] || e.tipo;
+      const valor = e.tipo === 'troca' ? `${usd(e.usdt)} → ${sol(e.sol)} SOL` : e.tipo === 'sol' ? `${e.sol > 0 ? '+' : '−'}${sol(Math.abs(e.sol))} SOL` : e.tipo === 'permissao' ? esc(e.perm) : usd(e.usdt);
+      const quem = e.para ? `${e.tipo === 'sol' && e.sol > 0 ? 'de ' : 'para '}${enderecos(e.para)}` : '';
+      return `<tr><td class="q">${dt(e.em)}</td><td>${esc(tipo)}</td><td class="num">${valor}</td><td>${quem}</td><td class="mut">${esc(e.obs || '')}</td><td>${ver(e.sig)}</td></tr>`;
+    }).join('') : '<tr><td class="vazio">Nenhuma até agora.</td></tr>';
+
+    $('maiores').innerHTML = s.maiores.length ? '<tr><th>Quando</th><th style="text-align:right">Valor</th><th>Para</th><th></th></tr>' + s.maiores.map(x =>
+      `<tr><td class="q">${dt(x.em)}</td><td class="num">${usd(x.usdt)}</td><td>${enderecos(x.para)}</td><td>${ver(x.sig)}</td></tr>`).join('') : '<tr><td class="vazio">Nenhum ainda.</td></tr>';
+
+    $('alertas').innerHTML = s.alertas.length ? s.alertas.map(a =>
+      `<div><span class="bola ${a.nivel}" title="${NOME_NIVEL[a.nivel] || ''}"></span> <span class="mut">${dt(a.em)}</span> ${esc(a.txt)} ${ver(a.sig)}</div>`).join('')
+      : '<div class="vazio">Nenhum aviso até agora.</div>';
+
+    $('rodape').textContent = `${s.origem ? s.origem.charAt(0).toUpperCase() + s.origem.slice(1) + '. ' : ''}Fonte: a RPC pública da Solana, só leitura; nada do app vai para lá. ` +
+      'Os alarmes vêm desse histórico: cada limite fica acima do que aconteceu nele. Não é aconselhamento financeiro.';
+  }
+
+  document.addEventListener('click', e => {
+    const t = e.target.closest('[data-tx],[data-conta]');
+    if (t?.dataset.tx) api.cxSolscan('tx', t.dataset.tx);
+    else if (t?.dataset.conta) api.cxSolscan('conta', t.dataset.conta);
+  });
+  $('agora').onclick = () => api.cxAgora();
+  $('ligado').onchange = e => api.cxOpcoes({ ligado: e.target.checked });
+  $('avisos').onchange = e => api.cxOpcoes({ avisos: e.target.checked });
+  let redim = 0;
+  addEventListener('resize', () => { clearTimeout(redim); redim = setTimeout(render, 150); });
+  setInterval(render, 30000); // o "há X min"
+  api.onCxState(s => { S = s; render(); });
+</script>
+</body>
+</html>

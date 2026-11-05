@@ -1,0 +1,14 @@
+{
+  "name": "pokemulti",
+  "productName": "PokeMulti",
+  "version": "1.0.1",
+  "description": "Abre até 4 contas do jogo em abas internas, cada uma com sessão isolada",
+  "author": "PokeMulti",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "44.8.0"
+  }
+}

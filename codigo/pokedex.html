@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Pokédex de consulta</title>
+<style>
+  :root { --bg:#151515; --box:#1f1f23; --linha:#2a2a30; --fg:#eee; --mut:#9a9a9a; --op:#a78bfa; --roxo:#6b3fd6;
+    --palco:#f7e4d8; } /* o fundo claro do palco do Mini Games */
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:13px system-ui, "Segoe UI", sans-serif; }
+  body { display:flex; flex-direction:column; }
+  header { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid var(--linha); }
+  .mut { color:var(--mut); font-size:12px; }
+  .sp { flex:1; }
+  button { height:26px; padding:0 9px; border-radius:6px; border:1px solid #3a3a42; background:#26262c; color:var(--fg); cursor:pointer; font:inherit; }
+  button:hover { background:#32323a; }
+  button.on { background:var(--roxo); border-color:var(--roxo); color:#fff; }
+  #ajuda { margin:0; padding:8px 12px 8px 28px; background:#1a2430; border-bottom:1px solid #23415a; line-height:1.5; font-size:12px; }
+  #ajuda b { color:#fff; }
+  #ajuda[hidden] { display:none; }
+  #pistas { display:grid; grid-template-columns:70px 1fr; gap:5px 8px; align-items:center; padding:8px 10px; border-bottom:1px solid var(--linha); }
+  .rot { font-size:11px; color:var(--mut); text-transform:uppercase; letter-spacing:.04em; }
+  .chips { display:flex; flex-wrap:wrap; gap:4px; align-items:center; }
+  .chip { height:23px; padding:0 7px; font-size:12px; border-radius:5px; }
+  .chip.tipo { border-color:var(--c); background:color-mix(in srgb, var(--c) 16%, #1e1e24); color:#e6e6e6; }
+  .chip.tipo.on { background:var(--c); color:#fff; text-shadow:0 1px 1px #0009; }
+  .cad i { display:inline-block; width:7px; height:7px; border-radius:50%; background:currentColor; opacity:.55; vertical-align:1px; }
+  .cad b { font-weight:800; }
+  input { height:24px; background:#000; color:#fff; border:1px solid #444; border-radius:5px; padding:0 6px; font:inherit; }
+  #letra { width:66px; text-transform:uppercase; }
+  #tamanho { width:72px; }
+  #busca { flex:1; min-width:110px; }
+  .stats { display:flex; gap:4px; flex-wrap:wrap; }
+  .stats label { display:flex; align-items:center; gap:3px; font-size:10px; color:var(--mut); }
+  .stats input { width:46px; padding:0 4px; }
+  input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+  #conta { padding:5px 10px; font-size:12px; color:var(--mut); border-bottom:1px solid var(--linha); }
+  #conta b { color:var(--fg); }
+  main { flex:1; overflow-y:auto; padding:8px 10px 40px; }
+  #grade { display:grid; grid-template-columns:repeat(auto-fill, minmax(94px, 1fr)); gap:6px; }
+  .card { background:var(--box); border:1px solid var(--linha); border-radius:8px; padding:4px 4px 3px; cursor:pointer; text-align:center;
+    content-visibility:auto; contain-intrinsic-size:auto 122px; }
+  .card:hover { border-color:var(--op); }
+  .card.copiado { border-color:#3fb950; box-shadow:0 0 0 1px #3fb950; }
+  .card[hidden] { display:none; }
+  .palco { height:84px; border-radius:6px; background:var(--palco); display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  .spr { display:block; flex-shrink:0; background-repeat:no-repeat; image-rendering:pixelated; }
+  .palco .sem { color:#a08878; font-size:11px; }
+  .nome { margin-top:3px; font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dex { font-size:10px; color:var(--mut); }
+  #vazio { padding:30px 10px; text-align:center; color:var(--mut); line-height:1.7; }
+  #vazio[hidden] { display:none; }
+  #toast { position:fixed; left:50%; bottom:12px; transform:translateX(-50%); max-width:92%; padding:7px 12px; border-radius:8px;
+    background:#1f3a24; border:1px solid #3fb950; color:#d6ffd9; font-size:12px; opacity:0; transition:opacity .2s; pointer-events:none; }
+  #toast.on { opacity:1; }
+</style>
+</head>
+<body>
+<header>
+  <b>🔍 Pokédex de consulta</b>
+  <span class="mut" id="info"></span>
+  <span class="sp"></span>
+  <button id="cores" title="Mostrar os desenhos em cores, em vez das sombras (para o Zoom Misterioso)">Cores</button>
+  <button id="limpar" title="Limpa todas as pistas, para a próxima rodada">Limpar (Esc)</button>
+  <button id="btAjuda" title="Como usar">?</button>
+</header>
+<ul id="ajuda" hidden>
+  <li>Marque as pistas que <b>já apareceram</b> na rodada: ficam só as espécies que batem com todas.</li>
+  <li>Clique numa espécie para copiar o nome (ou Enter, quando sobrar uma só). No jogo, clique no campo e cole com <b>Ctrl+V</b>.</li>
+  <li><b>Esc</b> limpa tudo para a próxima rodada.</li>
+  <li>Um tipo marcado mostra só quem tem <b>um tipo só</b>; se a pista mostrar dois, marque os dois.</li>
+  <li>Megas, formas regionais e as variantes de Outland aparecem em mais de uma região: o jogo não diz qual usa para elas.</li>
+  <li>Esta janela usa só os dados do jogo que o app já guardou: ela não conversa com o jogo nem lê a rodada.</li>
+  <li>⚠ <b>A mesma resposta em duas contas é combinar resultado, proibido pelos Termos do jogo.</b> Em cada rodada, jogue com uma conta só.</li>
+</ul>
+<section id="pistas">
+  <span class="rot">Tipo</span><div class="chips" id="tipos"></div>
+  <span class="rot">Região</span><div class="chips" id="regioes"></div>
+  <span class="rot">Nome</span>
+  <div class="chips">
+    <input id="letra" maxlength="2" placeholder="1ª letra" title="A 1ª letra do nome (estágio 4)">
+    <input id="tamanho" type="number" min="1" max="30" placeholder="letras" title="Quantas letras tem o nome (estágio 4)">
+    <input id="busca" placeholder="procurar pelo nome" title="Parte do nome, para conferir como se escreve">
+  </div>
+  <span class="rot">Sombra</span><div class="chips" id="formas"></div>
+  <span class="rot">Atributos</span><div class="stats" id="stats"></div>
+  <span class="rot">Evolução</span><div class="chips" id="cadeias"></div>
+  <span class="rot">Selos</span><div class="chips" id="selos"></div>
+</section>
+<div id="conta"></div>
+<main>
+  <div id="vazio">Carregando…</div>
+  <div id="grade"></div>
+</main>
+<div id="toast"></div>
+<script>
+  const $ = id => document.getElementById(id);
+  // ---- As pistas do Mini Games, com os nomes e as cores do jogo (sazonal.tipo.* e --t-* do estilo.css)
+  const TIPOS = [
+    ['NORMAL', 'Normal', '#9a9a72'], ['FIRE', 'Fogo', '#e8622a'], ['WATER', 'Água', '#4a86e8'], ['GRASS', 'Planta', '#5aa93e'],
+    ['ELECTRIC', 'Elétrico', '#dcb414'], ['ICE', 'Gelo', '#5cc6d0'], ['FIGHTING', 'Lutador', '#a8321e'], ['POISON', 'Veneno', '#8a3a92'],
+    ['GROUND', 'Terra', '#c4a352'], ['FLYING', 'Voador', '#7f9ce0'], ['PSYCHIC', 'Psíquico', '#e04a7c'], ['BUG', 'Inseto', '#93a81a'],
+    ['ROCK', 'Pedra', '#a48f30'], ['GHOST', 'Fantasma', '#5c4a90'], ['DRAGON', 'Dragão', '#6a3ce0'], ['DARK', 'Sombrio', '#5a4436'],
+    ['STEEL', 'Aço', '#8f8fa4'], ['FAIRY', 'Fada', '#dc84c4'],
+  ];
+  const NOME_TIPO = Object.fromEntries(TIPOS.map(([k, n]) => [k, n]));
+  const REGIOES = ['kanto', 'johto', 'hoenn', 'sinnoh', 'unova', 'kalos', 'alola', 'galar', 'paldea', 'outland'];
+  // As faixas da Pokédex nacional do jogo (FAIXA_GERACAO no app.js)
+  const FAIXAS = [[1, 151, 'kanto'], [152, 251, 'johto'], [252, 386, 'hoenn'], [387, 493, 'sinnoh'], [494, 649, 'unova'],
+    [650, 721, 'kalos'], [722, 809, 'alola'], [810, 905, 'galar'], [906, 1025, 'paldea']];
+  const REGIONAL = { Alolan: 'alola', Galarian: 'galar', Paldean: 'paldea' };
+  const STATS = ['HP', 'ATK', 'DEF', 'SP.ATK', 'SP.DEF', 'SPD'];
+  const FORMAS = [['alta', 'Alta', 'Sombra mais alta que larga'], ['quadrada', 'Quadrada', 'Altura e largura parecidas'],
+    ['larga', 'Larga', 'Sombra mais larga que alta']];
+  const SELOS = [['mega', true, 'Tem Mega Evolução'], ['mega', false, 'Sem Mega Evolução'], ['lend', true, 'Lendário'], ['lend', false, 'Não é lendário']];
+  // O lado do desenho no cartão. Os pequenos crescem em escala INTEIRA, como no palco do Mini Games (pixel quebrado
+  // ali fica torto); os de 39 px para cima crescem até o topo, senão ficavam com metade do tamanho dos pequenos.
+  const TOPO = 76;
+
+  const cap = s => s[0].toUpperCase() + s.slice(1);
+  const fmt = n => n.toLocaleString('pt-BR');
+  const semAcento = s => s.normalize('NFD').replace(/[^A-Za-z0-9]/g, '');
+  const geracao = d => FAIXAS.find(([a, b]) => d >= a && d <= b)?.[2] ?? null;
+  const ehOutland = id => id >= 2001 && id <= 2059;
+  // O dex por trás do pokeId: o clone de Orre (13xxx), as megas (3xxx, 9xxx) e as formas apontam o da espécie base
+  const dexDe = id => (id <= 1025 ? id : id % 1000);
+
+  let J = null, L = [], cards = [], soUm = null, toastT = 0;
+  const vazio = () => ({ tipos: [], regiao: '', letra: '', tamanho: 0, busca: '', forma: '', stats: ['', '', '', '', '', ''], cad: '', mega: null, lend: null });
+  const f = vazio();
+
+  // ---- Os dados do jogo em fichas por NOME (o jogo repete algumas espécies com outro pokeId: o clone de Orre, a 2ª
+  // ficha da mega). Onde o jogo não deixa claro (região das formas e de Outland, linha de evolução que se ramifica),
+  // a espécie entra em todas as respostas possíveis: sobra um candidato a mais, mas a certa nunca some.
+  function montar(d) {
+    const E = d.especies, tam = d.sprites.tam;
+    const porNome = new Map();
+    for (const [k, e] of Object.entries(E)) {
+      const id = Number(k);
+      let x = porNome.get(e.n);
+      if (!x) porNome.set(e.n, (x = { nome: e.n, id, tipos: new Set(), stats: [], reg: new Set(), l: false, m: false, i: null }));
+      x.id = Math.min(x.id, id);
+      x.tipos.add([...e.t].sort().join('/'));
+      x.stats.push(e.b);
+      if (e.l) x.l = true;
+      if (e.m) x.m = true;
+      if (x.i == null && e.i != null) x.i = e.i;
+      const g = ehOutland(id) ? 'outland' : geracao(dexDe(id));
+      if (g) x.reg.add(g);
+    }
+    const base = x => porNome.get(x.nome.replace(/^\S+ /, ''));
+    for (const x of porNome.values()) {
+      x.dex = ehOutland(x.id) ? null : dexDe(x.id);
+      if (REGIONAL[x.nome.split(' ')[0]]) x.reg.add(REGIONAL[x.nome.split(' ')[0]]);
+      if (x.reg.has('outland')) for (const r of base(x)?.reg ?? []) x.reg.add(r);
+      const limpo = semAcento(x.nome);
+      x.letra = limpo.charAt(0).toUpperCase();
+      x.tams = new Set([x.nome.length, x.nome.replace(/\s+/g, '').length, limpo.length]);
+      x.busca = limpo.toLowerCase();
+      x.forma = new Set();
+      const t = x.i != null ? tam[x.i] : null;
+      if (t) {
+        const r = t[1] / t[0];
+        if (r >= 1.15) x.forma.add('alta');
+        if (r > 0.8 && r < 1.25) x.forma.add('quadrada');
+        if (r <= 1 / 1.15) x.forma.add('larga');
+      }
+    }
+
+    // A linha de evolução ("Linha de N estágios", com a posição): pelas ligações de cada ficha, por nome
+    const filhos = new Map(), pais = new Map();
+    const liga = (m, a, b) => { if (!m.has(a)) m.set(a, new Set()); m.get(a).add(b); };
+    for (const e of Object.values(E)) for (const p of e.e ?? []) {
+      const b = E[p]?.n;
+      if (b && b !== e.n) { liga(filhos, e.n, b); liga(pais, b, e.n); }
+    }
+    const passos = (m, n, vis) => {
+      const prox = [...(m.get(n) ?? [])].filter(p => !vis.has(p));
+      if (!prox.length) return [0];
+      const s = new Set();
+      for (const p of prox) for (const v of passos(m, p, new Set([...vis, p]))) s.add(v + 1);
+      return [...s];
+    };
+    for (const x of porNome.values()) {
+      x.acima = passos(pais, x.nome, new Set([x.nome]));
+      x.abaixo = passos(filhos, x.nome, new Set([x.nome]));
+    }
+    // Na ramificada, cada galho é uma linha; e o tamanho da família inteira também vale (Applin → Flapple é 2, mas a
+    // família tem a linha Applin → Dipplin → Hydrapple, de 3)
+    const visto = new Set();
+    for (const x of porNome.values()) {
+      if (visto.has(x.nome)) continue;
+      const fam = [], fila = [x.nome];
+      visto.add(x.nome);
+      while (fila.length) {
+        const n = fila.pop();
+        fam.push(porNome.get(n));
+        for (const v of [...(filhos.get(n) ?? []), ...(pais.get(n) ?? [])]) if (!visto.has(v) && porNome.has(v)) { visto.add(v); fila.push(v); }
+      }
+      const maior = Math.max(...fam.map(y => Math.max(...y.acima) + 1 + Math.max(...y.abaixo)));
+      for (const y of fam) {
+        y.cad = new Set();
+        for (const u of y.acima) {
+          for (const b of y.abaixo) y.cad.add(`${u + 1}/${u + 1 + b}`);
+          y.cad.add(`${u + 1}/${maior}`);
+        }
+      }
+    }
+    const lista = [...porNome.values()];
+    for (const x of lista) x.ordem = (x.dex ?? base(x)?.dex ?? 9999) * 1e5 + x.id;
+    return lista.sort((a, b) => a.ordem - b.ordem);
+  }
+
+  const textoCad = c => (c === '1/1' ? 'não evolui' : `${c.split('/')[0]}º de ${c.split('/')[1]}`);
+  function dica(x) {
+    return [
+      `${x.nome} · ${x.dex ? `#${x.dex}` : 'Outland'}`,
+      [...x.tipos].map(t => t.split('/').map(k => NOME_TIPO[k] ?? k).join(' / ')).join(' ou '),
+      `Região: ${[...x.reg].map(cap).join(' ou ')}`,
+      STATS.map((s, k) => `${s} ${x.stats[0][k]}`).join(' · '),
+      `Evolução: ${[...x.cad].map(textoCad).join(' ou ')}`,
+      `${x.m ? 'Tem Mega Evolução' : 'Sem Mega Evolução'} · ${x.l ? 'Lendário' : 'Não é lendário'}`,
+    ].join('\n');
+  }
+
+  // ---- A sombra: o desenho inteiro de uma cor só, como no Mini Games (o quase transparente fica de fora)
+  async function sombras(png) {
+    const img = new Image();
+    img.src = png;
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth;
+    c.height = img.naturalHeight;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0);
+    const dados = ctx.getImageData(0, 0, c.width, c.height), px = dados.data;
+    for (let p = 0; p < px.length; p += 4) {
+      if (px[p + 3] > 8) { px[p] = 0x1d; px[p + 1] = 0x12; px[p + 2] = 0x20; px[p + 3] = 255; } else px[p + 3] = 0;
+    }
+    ctx.putImageData(dados, 0, 0);
+    return c.toDataURL('image/png');
+  }
+
+  function montarGrade() {
+    const { cel, cols, tam, borda = 0 } = J.sprites;
+    const frag = document.createDocumentFragment();
+    cards = L.map(x => {
+      const c = document.createElement('div');
+      c.className = 'card';
+      const palco = document.createElement('div');
+      palco.className = 'palco';
+      const t = x.i != null ? tam[x.i] : null;
+      if (t) {
+        const [w, h] = t, cabe = Math.min(TOPO / w, TOPO / h), k = cabe >= 2 ? Math.floor(cabe) : Math.max(1, cabe);
+        const s = document.createElement('i');
+        s.className = 'spr';
+        s.style.cssText = `width:${w * k}px;height:${h * k}px;background-size:${cols * cel * k}px auto;` +
+          `background-position:-${((x.i % cols) * cel + borda) * k}px -${(Math.floor(x.i / cols) * cel + borda) * k}px`;
+        palco.append(s);
+      } else {
+        const s = document.createElement('span');
+        s.className = 'sem';
+        s.textContent = 'sem desenho';
+        palco.append(s);
+      }
+      const nome = document.createElement('div');
+      nome.className = 'nome';
+      nome.textContent = x.nome;
+      const dex = document.createElement('div');
+      dex.className = 'dex';
+      dex.textContent = x.dex ? `#${x.dex}` : 'Outland';
+      c.append(palco, nome, dex);
+      c.title = dica(x);
+      c.onclick = () => copiar(x, c);
+      frag.append(c);
+      return c;
+    });
+    $('grade').replaceChildren(frag);
+  }
+
+  // As linhas de evolução que existem no jogo, desenhadas como a pista: "?" na posição, um ponto nos outros estágios
+  function montarCadeias() {
+    const todas = new Set(L.flatMap(x => [...x.cad]));
+    const ord = [...todas].sort((a, b) => a.split('/')[1] - b.split('/')[1] || a.split('/')[0] - b.split('/')[0]);
+    $('cadeias').replaceChildren(...ord.map(c => {
+      const [p, n] = c.split('/').map(Number);
+      const b = document.createElement('button');
+      b.className = 'chip cad';
+      b.dataset.v = c;
+      if (n === 1) b.textContent = 'Não evolui';
+      else b.innerHTML = Array.from({ length: n }, (_, i) => (i + 1 === p ? '<b>?</b>' : '<i></i>')).join(' → ');
+      b.title = n === 1 ? 'Não evolui' : `${p}º estágio de uma linha de ${n}`;
+      b.onclick = () => { f.cad = f.cad === c ? '' : c; atualizar(); };
+      return b;
+    }));
+  }
+
+  function montarPistas() {
+    $('tipos').replaceChildren(...TIPOS.map(([k, nome, cor]) => {
+      const b = document.createElement('button');
+      b.className = 'chip tipo';
+      b.dataset.v = k;
+      b.style.setProperty('--c', cor);
+      b.textContent = nome;
+      b.onclick = () => {
+        const i = f.tipos.indexOf(k);
+        if (i >= 0) f.tipos.splice(i, 1);
+        else { f.tipos.push(k); if (f.tipos.length > 2) f.tipos.shift(); }
+        atualizar();
+      };
+      return b;
+    }));
+    $('regioes').replaceChildren(...REGIOES.map(r => {
+      const b = document.createElement('button');
+      b.className = 'chip';
+      b.dataset.v = r;
+      b.textContent = cap(r);
+      b.onclick = () => { f.regiao = f.regiao === r ? '' : r; atualizar(); };
+      return b;
+    }));
+    $('formas').replaceChildren(...FORMAS.map(([k, nome, dicaForma]) => {
+      const b = document.createElement('button');
+      b.className = 'chip';
+      b.dataset.v = k;
+      b.textContent = nome;
+      b.title = `${dicaForma} (as do meio entram nas duas)`;
+      b.onclick = () => { f.forma = f.forma === k ? '' : k; atualizar(); };
+      return b;
+    }));
+    $('stats').replaceChildren(...STATS.map((s, k) => {
+      const l = document.createElement('label');
+      const inp = document.createElement('input');
+      inp.inputMode = 'numeric';
+      inp.maxLength = 3;
+      inp.oninput = () => { inp.value = inp.value.replace(/\D/g, ''); f.stats[k] = inp.value; atualizar(); };
+      l.append(s, inp);
+      return l;
+    }));
+    $('selos').replaceChildren(...SELOS.map(([campo, valor, nome]) => {
+      const b = document.createElement('button');
+      b.className = 'chip';
+      b.dataset.campo = campo;
+      b.dataset.valor = valor;
+      b.textContent = nome;
+      b.onclick = () => { f[campo] = f[campo] === valor ? null : valor; atualizar(); };
+      return b;
+    }));
+  }
+
+  function pintar() {
+    for (const b of $('tipos').children) b.classList.toggle('on', f.tipos.includes(b.dataset.v));
+    for (const b of $('regioes').children) b.classList.toggle('on', f.regiao === b.dataset.v);
+    for (const b of $('formas').children) b.classList.toggle('on', f.forma === b.dataset.v);
+    for (const b of $('cadeias').children) b.classList.toggle('on', f.cad === b.dataset.v);
+    for (const b of $('selos').children) b.classList.toggle('on', String(f[b.dataset.campo]) === b.dataset.valor);
+  }
+
+  function filtrar() {
+    if (!L.length) return;
+    const tipo = [...f.tipos].sort().join('/');
+    const st = f.stats.map(v => (v === '' ? null : Number(v)));
+    const comSt = st.some(v => v != null);
+    let n = 0, ultimo = null;
+    L.forEach((x, k) => {
+      const ok = (!tipo || x.tipos.has(tipo)) && (!f.regiao || x.reg.has(f.regiao))
+        && (!f.letra || x.letra === f.letra) && (!f.tamanho || x.tams.has(f.tamanho))
+        && (!f.busca || x.busca.includes(f.busca)) && (!f.forma || x.forma.has(f.forma)) && (!f.cad || x.cad.has(f.cad))
+        && (f.mega == null || x.m === f.mega) && (f.lend == null || x.l === f.lend)
+        && (!comSt || x.stats.some(b => st.every((v, i) => v == null || b[i] === v)));
+      cards[k].hidden = !ok;
+      if (ok) { n++; ultimo = x; }
+    });
+    soUm = n === 1 ? ultimo : null;
+    const conta = $('conta');
+    conta.replaceChildren();
+    const b = document.createElement('b');
+    b.textContent = n === L.length ? `${fmt(n)} espécies` : `${fmt(n)} de ${fmt(L.length)}`;
+    conta.append(b, n === 0 ? ' · nenhuma bate com essas pistas: confira o que você marcou'
+      : n === 1 ? ' · Enter (ou um clique) copia o nome' : ' · clique numa para copiar o nome');
+    if (f.tipos.length === 1) conta.append(` · só quem tem um tipo (${NOME_TIPO[f.tipos[0]]})`);
+  }
+
+  // Toda pista nova volta a grade para o topo: rolada, ela escondia os primeiros candidatos (27/10, o Ekans de uma
+  // rodada só de Veneno ficou na fileira de cima, fora da vista)
+  const atualizar = () => { pintar(); filtrar(); document.querySelector('main').scrollTop = 0; };
+
+  function limpar() {
+    Object.assign(f, vazio());
+    for (const inp of document.querySelectorAll('#pistas input')) inp.value = '';
+    document.activeElement?.blur();
+    document.querySelector('main').scrollTop = 0;
+    atualizar();
+  }
+
+  function copiar(x, card) {
+    api.pdCopiar(x.nome);
+    document.querySelector('.card.copiado')?.classList.remove('copiado');
+    card?.classList.add('copiado');
+    const t = $('toast');
+    t.textContent = `${x.nome} copiado: no jogo, clique no campo e cole com Ctrl+V`;
+    t.classList.add('on');
+    clearTimeout(toastT);
+    toastT = setTimeout(() => t.classList.remove('on'), 2600);
+  }
+
+  $('letra').oninput = e => {
+    const v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(-1);
+    e.target.value = v;
+    f.letra = v;
+    if (v) $('tamanho').focus(); // a pista vem junto: "T _ _ _ _ _ _"
+    atualizar();
+  };
+  $('tamanho').oninput = e => { f.tamanho = Math.min(30, Math.max(0, Math.floor(Number(e.target.value) || 0))); atualizar(); };
+  $('busca').oninput = e => { f.busca = semAcento(e.target.value).toLowerCase(); atualizar(); };
+  $('limpar').onclick = limpar;
+  $('btAjuda').onclick = () => { $('ajuda').hidden = !$('ajuda').hidden; };
+  $('cores').onclick = () => {
+    const on = !document.body.classList.contains('cores');
+    document.body.classList.toggle('cores', on);
+    $('cores').classList.toggle('on', on);
+    api.pdCfg({ cores: on });
+  };
+  addEventListener('keydown', e => {
+    if (e.key === 'Escape') { e.preventDefault(); limpar(); }
+    else if (e.key === 'Enter' && soUm && !e.target.closest('button')) { e.preventDefault(); copiar(soUm, cards[L.indexOf(soUm)]); }
+  });
+  montarPistas();
+
+  // Os dados chegam ao abrir a janela e de novo quando o app remonta os dados do jogo (a cada 3 dias)
+  api.onPdJogo(async (d, o) => {
+    document.body.classList.toggle('cores', !!o?.cores);
+    $('cores').classList.toggle('on', !!o?.cores);
+    if (!d?.especies) {
+      J = null; L = []; cards = []; soUm = null;
+      $('grade').replaceChildren();
+      $('conta').replaceChildren();
+      $('info').textContent = '';
+      const v = $('vazio');
+      v.hidden = false;
+      if (d?.montando) v.textContent = 'Preparando o catálogo: o app está lendo os dados do jogo. Leva uns segundos, só na primeira vez.';
+      else {
+        v.textContent = `Não consegui preparar o catálogo${d?.erro ? ` (${d.erro})` : ''}. `;
+        const b = document.createElement('button');
+        b.textContent = 'Tentar de novo';
+        b.onclick = () => { b.disabled = true; api.pdMontar(); };
+        v.append(b);
+      }
+      return;
+    }
+    if (J?.em === d.em) return; // os mesmos dados de novo (o aviso de "montando" da remontagem de 3 em 3 dias)
+    J = d;
+    const sil = await sombras(d.sprites.png);
+    let st = $('st-spr');
+    if (!st) { st = document.createElement('style'); st.id = 'st-spr'; document.head.append(st); }
+    st.textContent = `.spr{background-image:url("${sil}")} body.cores .spr{background-image:url("${d.sprites.png}")}`;
+    L = montar(d);
+    montarCadeias();
+    montarGrade();
+    $('vazio').hidden = true;
+    $('info').textContent = `${fmt(L.length)} espécies e formas do jogo`;
+    $('info').title = `Dados do jogo de ${new Date(d.em).toLocaleString('pt-BR')}`;
+    atualizar();
+  });
+</script>
+</body>
+</html>
