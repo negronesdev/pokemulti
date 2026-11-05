@@ -2,7 +2,7 @@
 
 Programa para Windows que abre até 4 contas do pokeidle.io em uma janela, com Sniper do Mercado, histórico de preços e a hunt que mais rende para o seu pokémon.
 
-**[Baixar a última versão](https://github.com/negronesdev/pokemulti/releases/latest/download/PokeMulti-Setup.exe)** · [Todas as versões](https://github.com/negronesdev/pokemulti/releases)
+**[Baixar a última versão](https://github.com/negronesdev/pokemulti/releases/latest/download/PokeMulti-Setup.exe)** · [Site](https://pokemulti.app) · [Todas as versões](https://github.com/negronesdev/pokemulti/releases) · [Termos de uso](https://pokemulti.app/termos.html)
 
 ## Como funciona
 
