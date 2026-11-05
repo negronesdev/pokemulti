@@ -8,7 +8,7 @@ Programa para Windows que abre até 4 contas do pokeidle.io em uma janela, com S
 
 1. Baixe e instale. São 7 dias grátis, com todos os recursos, sem cadastro.
 2. Entre nas suas contas, na própria página do jogo, dentro do programa. Os logins ficam só no seu PC.
-3. Depois dos 7 dias, o programa abre bloqueado e mostra o QR do Pix: R$ 10,00 por mês. Envie o comprovante pelo WhatsApp ou pelo Instagram, e você recebe uma key que libera o programa por 30 dias.
+3. Depois dos 7 dias, o programa abre bloqueado e mostra o valor da mensalidade e o QR do Pix. Envie o comprovante pelo WhatsApp ou pelo Instagram, e você recebe uma key que libera o programa por 30 dias.
 
 ## O Windows mostrou um aviso
 
