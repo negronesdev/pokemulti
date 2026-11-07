@@ -10,13 +10,16 @@
     font:13px system-ui, "Segoe UI", sans-serif; user-select:none; overflow:hidden; }
   /* gap e padding dos botões 1 px menores desde o 🔍 Pokédex: a 1919 px, com as abas medindo ~2,4 GB, ainda sobram ~45 px (antes, 50) */
   .bar { display:flex; align-items:center; gap:5px; height:44px; padding:0 8px; }
-  .tab { display:flex; align-items:center; gap:8px; height:32px; padding:0 12px; border-radius:8px;
-    background:var(--tab); cursor:pointer; min-width:130px; border:1px solid transparent; }
+  .tab { display:flex; align-items:center; gap:7px; height:32px; padding:0 10px; border-radius:8px;
+    background:var(--tab); cursor:pointer; border:1px solid transparent; }
   .tab:hover { border-color:#3a3a3a; }
   .tab.on { background:var(--tab-on); }
-  .tab .k { font-size:11px; color:var(--mut); }
-  .tab.on .k, .tab.on .m { color:#ffe4e1; }
-  .tab .n { font-weight:600; white-space:nowrap; }
+  /* 07/11/2026 (pedido do usuário): número + nome da conta + só a CPU (%); a memória saiu da aba */
+  .tab .k { font-size:14px; font-weight:700; color:var(--fg); }
+  .tab input { width:110px; }
+  .tab.on .k, .tab.on .n, .tab.on .m { color:#ffe4e1; }
+  .tab .n { font-weight:600; white-space:nowrap; max-width:140px; overflow:hidden; text-overflow:ellipsis; }
+  @media (max-width: 1200px) { .tab .n { display:none; } }
   .tab .m { font-size:11px; color:var(--mut); margin-left:auto; font-variant-numeric:tabular-nums; }
   .voto { padding:1px 5px; border-radius:5px; background:#f5c518; cursor:pointer; font-size:12px;
     animation:pisca 1.6s ease-in-out infinite; }
@@ -30,11 +33,15 @@
   .m { white-space:nowrap; }
   @media (max-width: 1500px) { .tab { min-width:0; padding:0 9px; } .tab .m { display:none; } }
   /* Janela estreita: os botões ficam só com o ícone (o nome segue na dica do mouse) */
-  @media (max-width: 1750px) { .lbl { display:none; } button { padding:0 8px; } }
+  .lbl { display:none; }
+  button { padding:0 8px; }
   button:hover { background:#2a2a2a; }
   button.on { border-color:#3fb950; color:#7ee787; }
   button.inc { opacity:.5; cursor:default; } /* já incluído no Ultra leve */
   /* 🏦 com aviso do caixa ainda não visto (ou um alarme que continua valendo) */
+  /* Lives pausadas (⏸ no painel): o 📺 fica com a borda amarela e o ⏸ ao lado */
+  button#tw.pausa { border-color:#f5c518; }
+  button#tw.pausa::after { content:'⏸'; margin-left:3px; color:#f5c518; }
   button.cx-amarelo { border-color:#e3b341; }
   button.cx-laranja { border-color:#f0883e; background:#33251a; }
   button.cx-vermelho { border-color:#f0544f; background:#3a1f1f; animation:pisca 1.6s ease-in-out infinite; }
@@ -55,6 +62,7 @@
   <button id="cx" title="Caixa do projeto: a carteira do jogo na rede Solana, de onde saem os saques. Lê as transações novas a cada 10 min (dados públicos) e avisa quando sai dinheiro que não é saque, quando o caixa cai rápido ou quando os saques param.">🏦</button>
   <button id="ec" title="Economia do RMT: cotação gema ⇄ coin, melhores rotas de conversão, ciclos e flips (com os dados que o app já coleta)">💰<span class="lbl"> Economia</span></button>
   <button id="pk" title="Monitor de Pokémons do RMT: vendas reais, preço por nota e pechinchas (pela Conta 1)">🐉<span class="lbl"> Pokémons</span></button>
+  <button id="pr" title="Precificador: quanto pedir, em gemas, por um pokémon das suas contas ou por uma ficha do jogo (Vender rápido, Preço justo e Esperar)">💲</button>
   <button id="pc" title="Monitor de Preços do RMT: registro a cada 6 h e gráfico do que sobe e desce (pela Conta 1)">📈<span class="lbl"> Preços</span></button>
   <button id="sn" title="Sniper do Mercado (RMT): cada conta compra sozinha os alvos da lista dela, até o preço máximo">🎯<span class="lbl"> Sniper</span></button>
   <button id="tw" title="Painel de lives (Twitch e Kick) da conta selecionada (Ctrl+T)">📺<span class="lbl"> Lives</span></button>
@@ -83,9 +91,9 @@
     st.names.forEach((name, i) => {
       const t = document.createElement('div');
       t.className = 'tab' + (i === st.active ? ' on' : '');
-      t.title = 'Ctrl+' + (i+1) + ' · Tab: próxima conta (Shift+Tab: a anterior) · duplo clique para renomear · botão direito para sair da conta';
-      const mem = met.mem[i] != null ? met.mem[i] + 'MB' : '';
-      const cpu = met.cpu[i] != null ? ' · ' + met.cpu[i] + '%' : '';
+      t.title = name + ' · Ctrl+' + (i+1) + ' · Tab: próxima conta (Shift+Tab: a anterior) · botão direito: renomear, recarregar, importar login ou sair da conta';
+      const mem = '';
+      const cpu = met.cpu[i] != null ? met.cpu[i] + '%' : '';
       t.innerHTML = `<span class="dot ${st.loading[i] ? 'load' : ''}"></span>
         <span class="k">${i+1}</span><span class="n"></span><span class="m">${mem}${cpu}</span>`;
       t.querySelector('.n').textContent = name;
@@ -99,27 +107,23 @@
         t.querySelector('.n').after(v);
       }
       t.onclick = () => api.select(i);
-      t.ondblclick = () => {
-        const n = t.querySelector('.n');
-        const inp = document.createElement('input');
-        inp.value = name; n.replaceWith(inp); inp.focus(); inp.select();
-        const done = () => api.rename(i, inp.value);
-        inp.onblur = done;
-        inp.onkeydown = e => { if (e.key === 'Enter') inp.blur(); if (e.key === 'Escape') { inp.value = name; inp.blur(); } };
-      };
-      t.oncontextmenu = e => {
-        e.preventDefault();
-        if (confirm(`Sair da "${name}"? Isso apaga o login salvo só desta aba.`)) api.clearSession(i);
-      };
+      t.oncontextmenu = e => { e.preventDefault(); api.tabMenu(i); };
       tabs.appendChild(t);
     });
     document.getElementById('mute').classList.toggle('on', !!st.muteHidden);
     const thr = document.getElementById('thr');
     thr.classList.toggle('on', !!(st.throttleHidden || st.ultra));
     thr.classList.toggle('inc', !!st.ultra);
-    document.getElementById('ultra').classList.toggle('on', !!st.ultra);
+    const ultra = document.getElementById('ultra');
+    ultra.classList.toggle('on', !!st.ultra);
+    ultra.dataset.dica ??= ultra.title;
+    ultra.title = ultra.dataset.dica + `\n\nA conta à vista desenha ${st.fpsVista ? `a ${st.fpsVista} quadros por segundo` : 'sem limite de quadros'} (com ou sem o Ultra leve). Botão direito aqui: ${st.fpsVista ? 'sem limite' : '30 quadros por segundo'}.`;
     document.getElementById('grid').classList.toggle('on', !!st.grid);
-    document.getElementById('tw').classList.toggle('on', !!st.twitchOpen);
+    const tw = document.getElementById('tw');
+    tw.classList.toggle('on', !!st.twitchOpen);
+    tw.classList.toggle('pausa', !!st.twitchPausado);
+    tw.dataset.dica ??= tw.title;
+    tw.title = st.twitchPausado ? '⏸ Lives pausadas: nenhuma aberta. Abra o painel e clique em ▶ para retomar.\n\n' + tw.dataset.dica : tw.dataset.dica;
     const cx = document.getElementById('cx');
     cx.className = st.caixa ? 'cx-' + st.caixa : '';
     cx.dataset.dica ??= cx.title;
@@ -137,7 +141,23 @@
     if (bar.scrollWidth > bar.clientWidth) document.body.classList.add('compacto');
   }
 
-  api.onState(s => { st = s; render(); });
+  // Renomear (pelo menu do botão direito): o campo entra no lugar do número; Enter grava, Esc desiste
+  let renomeando = false;
+  api.onRenomear(i => {
+    const t = tabs.children[i];
+    if (!t || t.querySelector('input')) return;
+    renomeando = true;
+    const name = st.names[i];
+    const inp = document.createElement('input');
+    inp.value = name;
+    inp.maxLength = 24;
+    t.querySelector('.n').replaceWith(inp);
+    inp.focus(); inp.select();
+    inp.onclick = e => e.stopPropagation();
+    inp.onblur = () => { renomeando = false; if (inp.value.trim() && inp.value.trim() !== name) api.rename(i, inp.value); else render(); };
+    inp.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') inp.blur(); if (e.key === 'Escape') { inp.value = name; inp.blur(); } };
+  });
+  api.onState(s => { st = s; if (!renomeando) render(); });
   // Enquanto se renomeia uma aba, a medição de 5 em 5 s não redesenha as abas (sumia com o campo do nome)
   api.onMetrics(m => { met = m; if (!tabs.querySelector('input')) render(); });
   // Tab: próxima conta (Shift+Tab, a anterior), menos enquanto se digita o nome de uma aba
@@ -149,10 +169,12 @@
   document.getElementById('mute').onclick = () => api.toggle('muteHidden');
   document.getElementById('thr').onclick = () => { if (!st.ultra) api.toggle('throttleHidden'); };
   document.getElementById('ultra').onclick = () => api.toggle('ultra');
+  document.getElementById('ultra').oncontextmenu = e => { e.preventDefault(); api.fpsVista(); };
   document.getElementById('tw').onclick = () => api.twToggle();
   document.getElementById('sn').onclick = () => api.snAbrir();
   document.getElementById('pc').onclick = () => api.pcAbrir();
   document.getElementById('pk').onclick = () => api.pkAbrir();
+  document.getElementById('pr').onclick = () => api.prAbrir();
   document.getElementById('ec').onclick = () => api.ecAbrir();
   document.getElementById('pd').onclick = () => api.pdAbrir();
   document.getElementById('rep').onclick = () => api.repAbrir();

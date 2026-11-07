@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Precificador de Pokémon</title>
+<style>
+  :root { --bg:#151515; --box:#1f1f23; --linha:#2a2a30; --fg:#eee; --mut:#9a9a9a; --gema:#e879f9; --roxo:#6b3fd6; --verde:#3fb950; --verde-f:#173a22;
+    --amarelo:#f5c518; --shiny:#ffd166; --aviso:#ffb86b; --ponto:#8a8a96; }
+  :root { color-scheme:dark; }
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:13px system-ui, "Segoe UI", sans-serif; }
+  body { display:flex; flex-direction:column; }
+  header { display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid var(--linha); flex-wrap:wrap; }
+  .mut { color:var(--mut); }
+  .peq { font-size:12px; }
+  .sp { flex:1; }
+  button { height:28px; padding:0 10px; border-radius:6px; border:1px solid #3a3a42; background:#26262c; color:var(--fg); cursor:pointer; font:inherit; }
+  button:hover { background:#32323a; }
+  button:disabled { opacity:.5; cursor:default; }
+  .seg { display:inline-flex; border:1px solid #3a3a42; border-radius:6px; overflow:hidden; flex-wrap:wrap; }
+  .seg button { border:0; border-radius:0; background:transparent; }
+  .seg button.on { background:var(--roxo); }
+  input[type=search], select { height:28px; background:#000; color:#fff; border:1px solid #444; border-radius:6px; padding:0 8px; font:inherit; }
+  input[type=number] { width:76px; height:24px; background:#000; color:#fff; border:1px solid #444; border-radius:5px; padding:0 6px; font:inherit; text-align:right; }
+  main { flex:1; display:flex; min-height:0; }
+  #fonte { width:400px; flex-shrink:0; display:flex; flex-direction:column; border-right:1px solid var(--linha); min-height:0; }
+  .fonte-cab { padding:10px 12px; display:flex; flex-direction:column; gap:8px; border-bottom:1px solid var(--linha); }
+  .linha-ctl { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  #lista { flex:1; overflow-y:auto; }
+  .pk { display:grid; grid-template-columns:30px 1fr auto; gap:8px; align-items:center; padding:6px 12px; border-bottom:1px solid var(--linha); cursor:pointer; }
+  .pk:hover { background:#1c1c20; }
+  .pk.on { background:#2a2238; }
+  .pk .nm { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pk .sub { color:var(--mut); font-size:11px; font-variant-numeric:tabular-nums; }
+  .pk .v { text-align:right; font-variant-numeric:tabular-nums; font-weight:600; }
+  .pk .v small { display:block; font-weight:400; color:var(--mut); font-size:10px; }
+  .ico { display:inline-block; flex-shrink:0; background-repeat:no-repeat; vertical-align:middle; }
+  .tag { display:inline-block; font-size:10px; font-weight:700; padding:1px 5px; border-radius:4px; background:#2a2a30; color:#c9d1d9; margin-left:4px; vertical-align:1px; }
+  .tag.z { background:#3a2a10; color:var(--amarelo); } .tag.aoe { background:#10303a; color:#67e8f9; } .tag.eq { background:#2b2350; color:#b9a3ff; }
+  .tag.sh { background:#3a3210; color:var(--shiny); }
+  #colar textarea { width:100%; height:220px; background:#000; color:#ddd; border:1px solid #444; border-radius:6px; padding:8px; font:12px ui-monospace, Consolas, monospace; resize:vertical; }
+  #colar { padding:10px 12px; display:flex; flex-direction:column; gap:8px; overflow-y:auto; }
+  #colar label.ck { display:flex; align-items:center; gap:6px; }
+  ol.passos { margin:0; padding-left:18px; color:var(--mut); line-height:1.6; }
+  #res { flex:1; overflow-y:auto; padding:16px 20px 30px; min-width:0; }
+  .vazio { padding:40px 20px; color:var(--mut); text-align:center; line-height:1.7; }
+  .cab-res { display:flex; gap:16px; align-items:center; }
+  .palco { width:84px; height:84px; display:flex; align-items:center; justify-content:center; background:#1b1b20; border:1px solid var(--linha); border-radius:10px; flex-shrink:0; }
+  .spr { display:inline-block; background-repeat:no-repeat; image-rendering:pixelated; }
+  h1 { margin:0; font-size:20px; }
+  h1 .nv { color:var(--mut); font-weight:500; }
+  .tipo { display:inline-block; font-size:11px; font-weight:700; padding:1px 7px; border-radius:10px; color:#fff; margin-right:4px; }
+  .ficha { color:#cfcfd6; margin-top:4px; font-size:12px; font-variant-numeric:tabular-nums; }
+  .chips { margin-top:6px; display:flex; gap:6px; flex-wrap:wrap; }
+  .chip { font-size:11px; border:1px solid #3a3a42; border-radius:10px; padding:1px 8px; }
+  .chip.sh { border-color:#7a6420; color:var(--shiny); }
+  .tres { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin:10px 0 6px; }
+  .preco { background:var(--box); border:1px solid var(--linha); border-radius:10px; padding:10px 12px; }
+  .preco span { color:var(--mut); font-size:12px; }
+  .preco b { display:block; font-size:22px; margin-top:2px; font-variant-numeric:tabular-nums; }
+  .preco.justo { border-color:var(--verde); }
+  .preco.justo b { color:#7ee787; font-size:26px; }
+  table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
+  th { text-align:left; font-size:11px; color:var(--mut); font-weight:600; padding:5px 6px; }
+  td { padding:5px 6px; border-top:1px solid var(--linha); }
+  td.r, th.r { text-align:right; }
+  table.partes td:first-child { color:#d6d6dc; }
+  table.partes tr.tot td { font-weight:700; }
+  .conf { display:flex; align-items:center; gap:12px; margin:14px 0 4px; }
+  .barra { width:220px; height:8px; background:#2a2a30; border-radius:4px; overflow:hidden; }
+  .barra i { display:block; height:100%; background:var(--amarelo); border-radius:4px; }
+  .bloco { background:#1a1a1f; border:1px solid var(--linha); border-radius:8px; padding:8px 12px; margin:8px 0; line-height:1.55; }
+  .bloco h3 { margin:0 0 4px; font-size:13px; }
+  .bloco ul { margin:2px 0; padding-left:18px; }
+  .aviso { color:var(--aviso); }
+  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--mut); margin:22px 0 8px; display:flex; align-items:center; gap:10px; }
+  .graf { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .graf > div { background:#18181c; border:1px solid var(--linha); border-radius:10px; padding:10px 12px; min-width:0; }
+  .graf h4 { margin:0 0 6px; font-size:13px; display:flex; align-items:center; gap:8px; }
+  svg { display:block; width:100%; height:auto; overflow:visible; }
+  svg text { fill:#9a9a9a; font:11px system-ui, sans-serif; }
+  .leg { font-size:11px; color:var(--mut); line-height:1.5; margin-top:6px; }
+  .leg i { display:inline-block; width:10px; height:10px; border-radius:50%; vertical-align:-1px; margin-right:4px; }
+  #tip { position:fixed; pointer-events:none; background:#000; border:1px solid #444; border-radius:6px; padding:6px 8px; font-size:12px; display:none; z-index:9; white-space:pre; line-height:1.45; }
+  details { margin-top:14px; }
+  details summary { cursor:pointer; font-weight:600; }
+  details p { line-height:1.6; margin:8px 0; }
+  .pilha { display:flex; height:12px; border-radius:6px; overflow:hidden; margin:6px 0; }
+  .pilha i { display:block; height:100%; }
+  .pilha i + i { border-left:2px solid var(--bg); }
+  .mais { margin-top:6px; }
+  footer { border-top:1px solid var(--linha); padding:6px 12px; font-size:11px; color:var(--mut); }
+  footer a { color:#b9a3ff; }
+</style>
+</head>
+<body>
+<header>
+  <b>💲 Precificador de Pokémon</b>
+  <span class="mut peq" id="info">Carregando…</span>
+  <span class="sp"></span>
+  <button id="recarregar" title="Lê de novo os pokémon das 4 contas">↻ Contas</button>
+</header>
+<main>
+  <section id="fonte">
+    <div class="fonte-cab">
+      <span class="seg" id="modo"><button data-v="contas" class="on">Minhas contas</button><button data-v="colar">Colar ficha</button></span>
+      <div id="ctlContas" class="linha-ctl">
+        <span class="seg" id="conta"></span>
+      </div>
+      <div id="ctlBusca" class="linha-ctl">
+        <input type="search" id="busca" placeholder="buscar pokémon…" style="flex:1">
+        <select id="ordem" title="Ordem da lista">
+          <option value="preco">Preço justo</option><option value="nivel">Nível</option><option value="nota">Nota</option><option value="nome">Nome</option>
+        </select>
+      </div>
+      <label class="mut peq" id="ctlTodos"><input type="checkbox" id="todos"> mostrar também os que o Mercado não aceita (Nv &lt; 50 ou Nota &lt; 3,5)</label>
+    </div>
+    <div id="lista"></div>
+    <div id="colar" hidden>
+      <ol class="passos">
+        <li>No jogo, abra a ficha do Pokémon e clique em <b>Copiar p/ ChatGPT</b>.</li>
+        <li>Cole o texto abaixo.</li>
+        <li>Marque o Z-Move e o AoE, se ele tiver: eles não vêm no texto.</li>
+      </ol>
+      <textarea id="texto" spellcheck="false" placeholder="Cole aqui o texto do botão Copiar p/ ChatGPT"></textarea>
+      <label class="ck"><input type="checkbox" id="zmove"> Z-Move</label>
+      <label class="ck"><input type="checkbox" id="aoe"> AoE</label>
+      <div><button id="precificarTexto">Precificar</button> <span class="mut peq" id="msgTexto"></span></div>
+    </div>
+  </section>
+  <section id="res"><div class="vazio">Escolha um pokémon da lista, ou cole a ficha de qualquer um.</div></section>
+</main>
+<footer>
+  O cálculo é o do <a id="lnk">Precificador de Pokémon</a> de briaoAle (licença MIT), refeito com as vendas que o Monitor de Pokémons guarda.
+  Preços são estimativas: o Mercado é feito por jogadores e varia muito.
+</footer>
+<div id="tip"></div>
+<script>
+  const $ = id => document.getElementById(id);
+  const fmt = n => (n == null || !Number.isFinite(Number(n)) ? '–' : Math.round(Number(n)).toLocaleString('pt-BR'));
+  const dec = (n, c = 2) => (n == null ? '–' : Number(n).toLocaleString('pt-BR', { minimumFractionDigits: c, maximumFractionDigits: c }));
+  const pct = x => Math.round(x * 100) + '%';
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const quando = ms => new Date(ms).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const dia = ms => new Date(ms).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  const TIPOS = { NORMAL: ['Normal', '#9a9a72'], FIRE: ['Fogo', '#e8622a'], WATER: ['Água', '#4a86e8'], GRASS: ['Planta', '#5aa93e'], ELECTRIC: ['Elétrico', '#dcb414'],
+    ICE: ['Gelo', '#5cc6d0'], FIGHTING: ['Lutador', '#a8321e'], POISON: ['Veneno', '#8a3a92'], GROUND: ['Terra', '#c4a352'], FLYING: ['Voador', '#7f9ce0'],
+    PSYCHIC: ['Psíquico', '#e04a7c'], BUG: ['Inseto', '#93a81a'], ROCK: ['Pedra', '#a48f30'], GHOST: ['Fantasma', '#5c4a90'], DRAGON: ['Dragão', '#6a3ce0'],
+    DARK: ['Sombrio', '#5a4436'], STEEL: ['Aço', '#8f8fa4'], FAIRY: ['Fada', '#dc84c4'] };
+  const IVK = ['hp', 'atk', 'def', 'spAtk', 'spDef', 'speed'];
+  const ivsDeTexto = s => { if (typeof s !== 'string' || s.length !== 6) return null; const o = {}; for (let i = 0; i < 6; i++) o[IVK[i]] = parseInt(s[i], 32) + 1; return o; };
+  const MERCADO_MIN = { level: 50, nota: 3.5 };
+  const anunciavel = p => p.lv >= MERCADO_MIN.level && p.nota != null && p.nota >= MERCADO_MIN.nota - 1e-9;
+
+  let J = null, S = null, CONTAS = null, R = null, pedidoAtual = 0, eixo = 'nota';
+  const op = { modo: 'contas', conta: 0, busca: '', ordem: 'preco', todos: false };
+  try { Object.assign(op, JSON.parse(localStorage.getItem('pr-op') || '{}'), { busca: '' }); } catch {}
+  const guardar = () => { try { localStorage.setItem('pr-op', JSON.stringify({ ...op, busca: '' })); } catch {} };
+  const LOTE = new Map();       // chave → { low, median, high, conf } | { sem } | { erro }
+  let versaoDados = '', selChave = null;
+
+  // ---- Desenhos do jogo: ícone (folha de 32 px) e retrato (folha em tamanho real)
+  const icone = (id, tam = 26) => {
+    const e = J?.especies?.[id], ic = J?.icones;
+    if (e?.i == null || !ic) return `<i class="ico" style="width:${tam}px;height:${tam}px"></i>`;
+    const c = e.i % ic.cols, r = Math.floor(e.i / ic.cols);
+    return `<i class="ico" style="width:${tam}px;height:${tam}px;background-size:${ic.cols * tam}px auto;background-position:-${c * tam}px -${r * tam}px"></i>`;
+  };
+  const retrato = id => {
+    const e = J?.especies?.[id], sp = J?.sprites;
+    if (e?.i == null || !sp?.tam?.[e.i]) return icone(id, 64);
+    const [w, h] = sp.tam[e.i], cabe = Math.min(76 / w, 76 / h), k = cabe >= 2 ? Math.floor(cabe) : Math.max(1, cabe), b = sp.borda || 0;
+    return `<i class="spr" style="width:${w * k}px;height:${h * k}px;background-size:${sp.cols * sp.cel * k}px auto;` +
+      `background-position:-${((e.i % sp.cols) * sp.cel + b) * k}px -${(Math.floor(e.i / sp.cols) * sp.cel + b) * k}px"></i>`;
+  };
+  const nomeEsp = id => J?.especies?.[id]?.n || `#${id}`;
+  const tipoChip = t => `<span class="tipo" style="background:${TIPOS[t]?.[1] || '#555'}">${esc(TIPOS[t]?.[0] || t)}</span>`;
+
+  // ---- Tooltip
+  const tip = $('tip');
+  const mostrarTip = (ev, txt) => { tip.textContent = txt; tip.style.display = 'block'; const x = Math.min(ev.clientX + 14, innerWidth - tip.offsetWidth - 8); tip.style.left = x + 'px'; tip.style.top = (ev.clientY + 14) + 'px'; };
+  const esconderTip = () => { tip.style.display = 'none'; };
+
+  // ---- Cabeçalho: de onde vêm os preços
+  function info() {
+    if (!S) return;
+    if (S.erro) { $('info').textContent = S.erro; return; }
+    const partes = [`${fmt(S.vendas)} vendas em gemas` + (S.primeira ? ` de ${dia(S.primeira)} a ${quando(S.ultima)}` : '')];
+    const c = S.completar || {};
+    if (S.aprox) partes.push(c.desligado ? `${fmt(S.aprox)} com IVs aproximados` : `${fmt(S.aprox)} com IVs aproximados (o app está completando as fichas: ${fmt(c.feitas)} prontas)`);
+    if (S.calibrando) partes.push(`calibrando a confiança${S.calibProg ? ` (${S.calibProg})` : ''}…`);
+    else if (S.calib?.pronto) partes.push(`confiança calibrada em ${quando(S.calib.em)}`);
+    $('info').textContent = partes.join(' · ');
+  }
+
+  // ---- A lista das contas
+  const chave = (conta, p) => `${conta}:${p.id}:${p.lv}:${p.z || ''}:${p.aoe ? 1 : 0}`;
+  const alvoDe = p => ({ speciesId: p.sp, level: p.lv, potencia: p.pot, quality: p.q, shiny: p.sh, ivs: p.ivs, tmElemental: p.z || null, tmAoe: !!p.aoe, nota: p.nota });
+  function botoesContas() {
+    const seg = $('conta');
+    seg.innerHTML = (CONTAS || []).map(c => `<button data-v="${c.conta}" class="${c.conta === op.conta ? 'on' : ''}" title="${esc(c.erro || `${c.lista?.length ?? 0} pokémon`)}">${esc(c.nome || `Conta ${c.conta + 1}`)}</button>`).join('');
+    seg.querySelectorAll('button').forEach(b => { b.onclick = () => { op.conta = Number(b.dataset.v); guardar(); botoesContas(); desenharLista(); pedirLote(); }; });
+  }
+  function listaFiltrada() {
+    const c = CONTAS?.find(x => x.conta === op.conta);
+    if (!c?.lista) return { c, itens: [] };
+    const b = op.busca.trim().toLowerCase();
+    let itens = c.lista.filter(p => (op.todos || anunciavel(p)) && (!b || nomeEsp(p.sp).toLowerCase().includes(b) || String(p.nome).toLowerCase().includes(b)));
+    const v = p => LOTE.get(chave(op.conta, p))?.median ?? -1;
+    const ord = { preco: (a, b) => v(b) - v(a) || b.lv - a.lv, nivel: (a, b) => b.lv - a.lv, nota: (a, b) => (b.nota ?? 0) - (a.nota ?? 0), nome: (a, b) => nomeEsp(a.sp).localeCompare(nomeEsp(b.sp)) };
+    itens = itens.sort(ord[op.ordem] || ord.preco);
+    return { c, itens };
+  }
+  function desenharLista() {
+    const host = $('lista');
+    if (!CONTAS) { host.innerHTML = '<div class="vazio">Lendo os pokémon das contas…</div>'; return; }
+    const { c, itens } = listaFiltrada();
+    if (!c?.lista) { host.innerHTML = `<div class="vazio">${esc(c?.erro || 'Conta sem dados')}.<br>Abra a conta no app e espere o jogo carregar.</div>`; return; }
+    if (!itens.length) { host.innerHTML = `<div class="vazio">Nenhum pokémon ${op.todos ? '' : 'que o Mercado aceite '}${op.busca ? 'com essa busca ' : ''}nesta conta.</div>`; return; }
+    host.innerHTML = itens.map(p => {
+      const k = chave(op.conta, p), l = LOTE.get(k);
+      const val = !anunciavel(p) ? '<span class="mut">não anuncia</span>' : !p.ivs ? '<span class="mut">sem IVs</span>' : !l ? '<span class="mut">…</span>' : l.erro || l.sem ? '<span class="mut">sem preço</span>'
+        : `${fmt(l.median)}<small>${fmt(l.low)} – ${fmt(l.high)}</small>`;
+      return `<div class="pk${k === selChave ? ' on' : ''}" data-k="${k}">${icone(p.sp)}<div style="min-width:0"><div class="nm">${esc(nomeEsp(p.sp))}${p.sh ? ' <span class="tag sh">✨</span>' : ''}${p.slot != null ? '<span class="tag eq" title="Na equipe">equipe</span>' : ''}${p.z ? `<span class="tag z" title="Z-Move ${esc(p.z)}">Z</span>` : ''}${p.aoe ? '<span class="tag aoe">AoE</span>' : ''}</div>` +
+        `<div class="sub">Nv ${fmt(p.lv)} · N ${p.nota != null ? dec(p.nota) : '?'} · P${p.pot ?? '?'} · IV ${p.ivt ?? '?'}</div></div><div class="v">${val}</div></div>`;
+    }).join('');
+    host.querySelectorAll('.pk').forEach(el => {
+      el.onclick = () => {
+        const p = itens.find(x => chave(op.conta, x) === el.dataset.k);
+        if (!p) return;
+        selChave = el.dataset.k;
+        host.querySelectorAll('.pk.on').forEach(x => x.classList.remove('on'));
+        el.classList.add('on');
+        precificar(alvoDe(p), { conta: CONTAS.find(x => x.conta === op.conta)?.nome, refino: p.ref });
+      };
+    });
+  }
+  // Os preços da lista, aos poucos (40 de cada vez), só dos que o Mercado aceita
+  let loteRodando = false;
+  async function pedirLote() {
+    if (loteRodando || !CONTAS) return;
+    loteRodando = true;
+    try {
+      while (true) {
+        const c = CONTAS.find(x => x.conta === op.conta);
+        const faltam = (c?.lista || []).filter(p => anunciavel(p) && p.ivs && !LOTE.has(chave(op.conta, p))).sort((a, b) => b.lv - a.lv).slice(0, 40);
+        if (!faltam.length) break;
+        const conta = op.conta;
+        const r = await api.prLote(faltam.map(p => ({ ...alvoDe(p), chave: chave(conta, p) }))) || {};
+        for (const p of faltam) LOTE.set(chave(conta, p), r[chave(conta, p)] || { erro: 'sem resposta' });
+        desenharLista();
+      }
+    } finally { loteRodando = false; }
+  }
+  async function lerContas() {
+    $('recarregar').disabled = true;
+    try { CONTAS = await api.prContas(); } catch { CONTAS = []; }
+    $('recarregar').disabled = false;
+    if (!CONTAS.some(c => c.conta === op.conta)) op.conta = 0;
+    botoesContas();
+    desenharLista();
+    pedirLote();
+  }
+
+  // ---- Colar a ficha (o texto do "Copiar p/ ChatGPT", em português ou inglês; leitura do js/ficha.js do precificador)
+  function lerFicha(texto) {
+    const linhas = String(texto || '').split(/\r?\n/);
+    const campo = nome => { const re = new RegExp('^\\s*[-*]?\\s*(?:' + nome + ')\\s*:\\s*(.+)$', 'i'); for (const l of linhas) { const m = l.match(re); if (m) return m[1].trim(); } return null; };
+    const inteiro = s => { const m = String(s ?? '').match(/\d[\d.,]*/); return m ? Number(m[0].replace(/[.,]/g, '')) : null; };
+    const decimal = s => { const m = String(s ?? '').match(/\d+(?:[.,]\d+)?/); return m ? Number(m[0].replace(',', '.')) : null; };
+    const esp = campo('esp[ée]cie|species');
+    const idTxt = esp?.match(/\(#(\d+)\)/)?.[1];
+    const nome = esp ? esp.replace(/\s*\(#\d+\).*$/, '').replace(/\s+[—–-]\s+[A-Z /]+$/, '').replace(/✨/g, '').trim() : null;
+    const ST = { HP: 'hp', ATK: 'atk', DEF: 'def', SPATK: 'spAtk', SPDEF: 'spDef', SPD: 'speed', SPEED: 'speed', SPE: 'speed' };
+    const ivs = {};
+    let cols = null, refino = false;
+    for (const l of linhas) {
+      if (!l.trim().startsWith('|')) continue;
+      const row = l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+      if (/^stat$/i.test(row[0])) { cols = { base: row.findIndex(c => /^(?:species )?base/i.test(c)), iv: row.findIndex(c => /^iv\b/i.test(c)), refino: row.findIndex(c => /refino|refine/i.test(c)) }; continue; }
+      const k = ST[row[0].toUpperCase().replace(/[^A-Z]/g, '')];
+      if (!cols || !k || cols.iv < 0) continue;
+      const iv = inteiro(row[cols.iv]);
+      if (Number.isInteger(iv)) ivs[k] = iv;
+      const rf = cols.refino >= 0 ? inteiro(row[cols.refino]) : inteiro(String(row[cols.base] ?? '').match(/\+\s*([\d.,]+)/)?.[1]);
+      if (rf > 0) refino = true;
+    }
+    let speciesId = idTxt ? Number(idTxt) : null;
+    if ((!speciesId || J?.especies?.[speciesId]?.n?.toLowerCase() !== nome?.toLowerCase()) && nome && J?.especies) {
+      const alvo = nome.toLowerCase();
+      speciesId = Number(Object.keys(J.especies).find(id => J.especies[id].n.toLowerCase() === alvo)) || (J.especies[speciesId] ? speciesId : null);
+    }
+    return { speciesId, nome, level: inteiro(campo('n[íi]vel|level')), potencia: inteiro(campo('pot[êe]ncia|potency')), quality: decimal(campo('qualidade|quality')),
+      nota: decimal(campo('nota(?: da calculadora)?|calculator score')), shiny: /^(sim|yes|true)\b/i.test(campo('shiny') || ''), ivs, refino };
+  }
+  $('precificarTexto').onclick = () => {
+    const f = lerFicha($('texto').value);
+    const falta = [];
+    if (!f.speciesId || !J?.especies?.[f.speciesId]) falta.push('a espécie');
+    if (!(f.level > 0)) falta.push('o nível');
+    if (!(f.potencia >= 1)) falta.push('a potência');
+    if (!(f.quality > 0)) falta.push('a qualidade');
+    if (IVK.some(k => !Number.isInteger(f.ivs[k]))) falta.push('os 6 IVs');
+    if (falta.length) { $('msgTexto').textContent = `Não achei ${falta.join(', ')} no texto.`; return; }
+    $('msgTexto').textContent = '';
+    selChave = null;
+    document.querySelectorAll('.pk.on').forEach(x => x.classList.remove('on'));
+    precificar({ speciesId: f.speciesId, level: f.level, potencia: f.potencia, quality: f.quality, shiny: f.shiny, ivs: f.ivs,
+      tmElemental: $('zmove').checked || null, tmAoe: $('aoe').checked, nota: f.nota }, { refino: f.refino, colado: true });
+  };
+
+  // ---- O preço de um pokémon
+  let ultimoAlvo = null, ultimoExtra = null;
+  async function precificar(alvo, extra = {}) {
+    ultimoAlvo = alvo; ultimoExtra = extra;
+    const n = ++pedidoAtual;
+    $('res').innerHTML = '<div class="vazio">Calculando…</div>';
+    const r = await api.prPrecificar(alvo);
+    if (n !== pedidoAtual) return;
+    R = r;
+    desenharResultado(alvo, extra);
+  }
+  const RAZOES = {
+    proximidade: r => `Poucas vendas comparáveis: o peso das vendas parecidas (da cadeia de ${r.family} e de espécies dos mesmos tipos) equivale a só cerca de ${Math.max(1, Math.round(5 * r.confidenceParts.proximidade / Math.max(0.01, 1 - r.confidenceParts.proximidade)))} vendas.`,
+    certeza: () => 'Muitas das vendas parecidas têm Adicional incerto: o jogo mostra o Z-Move e o AoE de hoje, não os da hora da venda.',
+    consistencia: () => 'Os preços dessas vendas variam muito entre si.',
+    ampliacao: r => `Poucas vendas da cadeia de ${r.family}: boa parte do preço vem de outras espécies.`
+  };
+  function desenharResultado(alvo, extra) {
+    const host = $('res'), r = R;
+    if (!r || r.erro) { host.innerHTML = `<div class="vazio">${esc(r?.erro || 'Sem resposta.')}</div>`; return; }
+    const ivt = IVK.reduce((s, k) => s + ((typeof alvo.ivs === 'string' ? ivsDeTexto(alvo.ivs) : alvo.ivs)?.[k] || 0), 0);
+    const chips = [r.shiny ? '<span class="chip sh">Shiny</span>' : '', ...r.parts.map(p => `<span class="chip">${esc(p.label)}</span>`)].join('');
+    const nao = alvo.level < MERCADO_MIN.level || r.nota == null || r.nota < MERCADO_MIN.nota - 1e-9;
+    let h = `<div class="cab-res"><div class="palco">${retrato(r.speciesId)}</div><div style="min-width:0">
+      <h1>${esc(r.name)}${r.shiny ? ' ✨' : ''} <span class="nv">· Nv ${fmt(r.level)}</span></h1>
+      <div>${(r.types || []).map(tipoChip).join('')}${extra.conta ? `<span class="mut peq">${esc(extra.conta)}</span>` : ''}</div>
+      <div class="ficha">Nota ${dec(r.nota)} · Poder (Nv 100) ${fmt(r.pve)} · P${alvo.potencia} · Qualidade ${dec(alvo.quality, 3)} · IV ${ivt}</div>
+      <div class="chips">${chips}</div></div></div>`;
+    if (nao) h += `<div class="bloco aviso">O Mercado só aceita anúncio de pokémon com Nv ${MERCADO_MIN.level} e Nota ${dec(MERCADO_MIN.nota, 1)} para cima. O número abaixo é só uma referência.</div>`;
+    if (extra.refino) h += '<div class="bloco">Este pokémon tem refino. O preço não conta o refino: o Poder é calculado sem ele, como nas vendas.</div>';
+    if (!r.available) {
+      host.innerHTML = h + '<div class="vazio">Ainda não há vendas suficientes para comparar (é preciso pelo menos 3 do mesmo tipo, shiny ou não).</div>';
+      return;
+    }
+    const known = r.parts.reduce((s, p) => s + (p.total || 0), 0);
+    h += `<p class="mut peq" style="margin:14px 0 0">Preços em gemas.</p>
+      <div class="tres"><div class="preco"><span>Vender rápido</span><b>${fmt(r.low)}</b></div><div class="preco justo"><span>Preço justo</span><b>${fmt(r.median)}</b></div><div class="preco"><span>Esperar</span><b>${fmt(r.high)}</b></div></div>
+      <table class="partes"><tr><td>Pokémon</td><td class="r">${fmt(r.base)} gemas</td></tr>` +
+      r.parts.map(p => `<tr><td>${esc(p.label)} (${p.quantity} × <input type="number" min="0" step="0.5" data-item="${p.id}" value="${p.unit ?? ''}" placeholder="?" title="Preço de cada fragmento. Apague para voltar à cotação do dia (${p.quote != null ? dec(p.quote, 1) : 'sem cotação'}).">)</td><td class="r">${p.total != null ? fmt(p.total) + ' gemas' : '<span class="aviso">sem cotação</span>'}</td></tr>`).join('') +
+      `</table>` + (r.parts.length ? '<p class="mut peq">Você pode trocar o preço por unidade dos Adicionais: o cálculo usa a cotação do dia (a mediana do menor anúncio), que pode estar defasada.</p>' : '');
+    // Confiança e o porquê
+    const c = r.confidence, pesos = S?.calib?.pronto ? S.calib.pesos : [-2.64, 0.66, 0.68, 1.53, 0.85], K = ['proximidade', 'certeza', 'consistencia', 'ampliacao'];
+    h += `<div class="conf"><b>Confiança ${c.percent}%</b><div class="barra"><i style="width:${c.percent}%"></i></div></div>
+      <div class="mut peq">Em vendas como esta, cerca de ${c.percent} em cada 100 costumam sair a até 25% do Preço justo.</div>`;
+    if (c.percent < 90) {
+      const perdas = K.map((k, i) => ({ k, loss: pesos[i + 1] * (1 - r.confidenceParts[k]) })).filter(x => x.loss > 0.15).sort((a, b) => b.loss - a.loss).slice(0, 3);
+      if (perdas.length) h += `<div class="bloco"><h3>Por que a confiança não é maior</h3><ul>${perdas.map(x => `<li>${esc(RAZOES[x.k](r))}</li>`).join('')}</ul></div>`;
+    }
+    // Como chegamos ao preço: a média das vendas da cadeia que mais pesaram
+    const daCadeia = r.comps.filter(x => x.share > 0);
+    if (daCadeia.length) {
+      const W = daCadeia.reduce((s, x) => s + x.share, 0), m = f => daCadeia.reduce((s, x) => s + f(x) * x.share, 0) / W;
+      const base = m(x => x.base), nv = Math.exp(m(x => Math.log(x.level))), notas = daCadeia.filter(x => x.nota != null);
+      const nt = notas.length ? notas.reduce((s, x) => s + x.nota * x.share, 0) / notas.reduce((s, x) => s + x.share, 0) : null;
+      const comp = [];
+      if (r.level > nv * 1.15) comp.push('tem nível mais alto'); else if (r.level < nv / 1.15) comp.push('tem nível mais baixo');
+      if (nt != null && r.nota != null) { if (r.nota > nt + 0.1) comp.push('nota maior'); else if (r.nota < nt - 0.1) comp.push('nota menor'); }
+      h += `<div class="bloco"><h3>Como chegamos ao preço</h3>As vendas da cadeia de ${esc(r.family)} mais parecidas saíram, em média, por ${fmt(base)} gemas (sem Adicionais), com Nv ${fmt(nv)}${nt != null ? ` e Nota ${dec(nt)}` : ''}.
+        Este pokémon tem Nv ${fmt(r.level)} e Nota ${dec(r.nota)}${comp.length ? `, ou seja, ${comp.join(' e ')}` : ', bem parecido'}, então estimamos ${fmt(r.base)} gemas${known ? `, e com os Adicionais, ${fmt(r.median)}` : ''}.</div>`;
+    }
+    // Gráficos
+    h += `<h2>Vendas e nível</h2><div class="graf">
+      <div><h4>Vendas da cadeia de ${esc(r.family)} <span class="sp"></span><span class="seg" id="eixo"><button data-v="nota" class="${eixo === 'nota' ? 'on' : ''}">Por nota</button><button data-v="pve" class="${eixo === 'pve' ? 'on' : ''}">Por poder</button></span></h4><div id="gVendas"></div>
+        <div class="leg"><i style="background:var(--ponto)"></i>uma venda da cadeia (sem Adicionais), de qualquer nível · <i style="background:var(--amarelo)"></i>este pokémon · linha branca: Preço justo · faixa verde: de Vender rápido a Esperar</div></div>
+      <div><h4>Preço por nível</h4><div id="gNivel"></div><div class="leg" id="legNivel"></div></div></div>`;
+    // As vendas que mais pesaram
+    h += `<h2>Vendas da cadeia de ${esc(r.family)} que mais pesaram no preço</h2><div id="tComps"></div>`;
+    h += explicacao(r);
+    host.innerHTML = h;
+    host.querySelectorAll('input[data-item]').forEach(inp => {
+      inp.onchange = () => { api.prUnidades(Number(inp.dataset.item), inp.value === '' ? null : Number(inp.value)); setTimeout(() => ultimoAlvo && precificar(ultimoAlvo, ultimoExtra), 150); };
+    });
+    host.querySelectorAll('#eixo button').forEach(b => { b.onclick = () => { eixo = b.dataset.v; host.querySelectorAll('#eixo button').forEach(x => x.classList.toggle('on', x === b)); graficoVendas(r, known); }; });
+    graficoVendas(r, known);
+    graficoNivel(r);
+    tabelaComps(r);
+  }
+
+  // ---- Gráfico: as vendas da cadeia (preço sem Adicionais × nota ou poder), escala log no preço
+  function graficoVendas(r, known) {
+    const host = $('gVendas');
+    const pts = (r.cadeia || []).slice(-1500).filter(x => x.base > 0 && (eixo === 'pve' ? x.pve > 0 : x.nota != null));
+    const W = 460, H = 270, L = 58, B = 34, T = 10, Rm = 12;
+    const xs = pts.map(p => (eixo === 'pve' ? Math.log(p.pve) : p.nota)), xAlvo = eixo === 'pve' ? Math.log(r.pve) : r.nota;
+    const ys = pts.map(p => Math.log(p.base)), baseAlvo = Math.max(1, r.base), lo = Math.max(1, r.low - known), hi = Math.max(1, r.high - known);
+    const xmin = Math.min(...xs, xAlvo ?? Infinity), xmax = Math.max(...xs, xAlvo ?? -Infinity);
+    const ymin = Math.min(...ys, Math.log(lo)), ymax = Math.max(...ys, Math.log(hi));
+    const dx = xmax - xmin || 1, dy = ymax - ymin || 1;
+    const X = v => L + ((v - xmin) / dx) * (W - L - Rm), Y = v => T + (1 - (v - ymin) / dy) * (H - T - B);
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Vendas da cadeia: preço por ${eixo === 'pve' ? 'poder' : 'nota'}">`;
+    s += `<line x1="${L}" y1="${T}" x2="${L}" y2="${H - B}" stroke="#444"/><line x1="${L}" y1="${H - B}" x2="${W - Rm}" y2="${H - B}" stroke="#444"/>`;
+    // faixa e linha do Preço justo (sem Adicionais)
+    s += `<rect x="${L}" y="${Y(Math.log(hi))}" width="${W - L - Rm}" height="${Math.max(1, Y(Math.log(lo)) - Y(Math.log(hi)))}" fill="#3fb950" opacity=".18"/>`;
+    s += `<line x1="${L}" x2="${W - Rm}" y1="${Y(Math.log(baseAlvo))}" y2="${Y(Math.log(baseAlvo))}" stroke="#e8e8e8" stroke-width="2"/>`;
+    for (let i = 0; i < pts.length; i++) s += `<circle cx="${X(xs[i]).toFixed(1)}" cy="${Y(ys[i]).toFixed(1)}" r="3.2" fill="#8a8a96" opacity=".75" data-i="${i}"/>`;
+    if (xAlvo != null) {
+      s += `<line x1="${X(xAlvo)}" x2="${X(xAlvo)}" y1="${T}" y2="${H - B}" stroke="#f5c518" stroke-dasharray="4 3" stroke-width="1.5"/>`;
+      s += `<circle cx="${X(xAlvo)}" cy="${Y(Math.log(baseAlvo))}" r="6" fill="#f5c518" stroke="#151515" stroke-width="2"/>`;
+    }
+    // eixos: 3 marcas no preço (mín., Preço justo, máx.) e no x
+    const yt = [ymin, ymax].map(v => `<text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${fmt(Math.exp(v))}</text>`).join('');
+    s += yt + `<text x="${L - 6}" y="${Y(Math.log(baseAlvo)) + 4}" text-anchor="end" style="fill:#e8e8e8;font-weight:700">${fmt(baseAlvo)}</text>`;
+    const xl = v => (eixo === 'pve' ? fmt(Math.exp(v)) : dec(v));
+    s += `<text x="${X(xmin)}" y="${H - B + 16}" text-anchor="start">${xl(xmin)}</text><text x="${X(xmax)}" y="${H - B + 16}" text-anchor="end">${xl(xmax)}</text>`;
+    if (xAlvo != null) s += `<text x="${X(xAlvo)}" y="${H - B + 16}" text-anchor="middle" style="fill:#f5c518;font-weight:700">${xl(xAlvo)}</text>`;
+    s += `<text x="${(L + W - Rm) / 2}" y="${H - 4}" text-anchor="middle">${eixo === 'pve' ? 'Poder (Nv 100) →' : 'Nota (0 a 10) →'}</text></svg>`;
+    host.innerHTML = pts.length ? s : '<div class="mut peq">Sem vendas da cadeia nos últimos 30 dias: o preço vem das outras espécies.</div>';
+    host.querySelector('svg')?.addEventListener('mousemove', ev => {
+      const c = ev.target.closest?.('circle[data-i]');
+      if (!c) return esconderTip();
+      const p = pts[Number(c.dataset.i)];
+      mostrarTip(ev, `${p.name} · Nv ${fmt(p.level)}\nNota ${dec(p.nota)} · Poder ${fmt(p.pve)}\n${fmt(p.price)} gemas (${fmt(p.base)} sem Adicionais)\n${quando(p.at)}${p.uncertain ? '\nAdicional incerto' : ''}${p.aprox ? '\nIVs aproximados' : ''}`);
+    });
+    host.querySelector('svg')?.addEventListener('mouseleave', esconderTip);
+  }
+
+  // ---- Gráfico: o mesmo pokémon em outros níveis (a curva do nível do mercado)
+  function graficoNivel(r) {
+    const host = $('gNivel'), pts = r.byLevel || [];
+    if (pts.length < 2) { host.innerHTML = '<div class="mut peq">Sem outros níveis para comparar.</div>'; $('legNivel').textContent = ''; return; }
+    const W = 460, H = 270, L = 58, B = 34, T = 10, Rm = 16;
+    const lx = pts.map(p => Math.log(p.level)), xmin = lx[0], xmax = lx.at(-1), ymax = Math.max(...pts.map(p => p.high)) * 1.05;
+    const X = v => L + ((v - xmin) / (xmax - xmin || 1)) * (W - L - Rm), Y = v => T + (1 - v / ymax) * (H - T - B);
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Preço por nível">`;
+    s += `<line x1="${L}" y1="${T}" x2="${L}" y2="${H - B}" stroke="#444"/><line x1="${L}" y1="${H - B}" x2="${W - Rm}" y2="${H - B}" stroke="#444"/>`;
+    s += `<path d="M${pts.map((p, i) => `${X(lx[i]).toFixed(1)},${Y(p.high).toFixed(1)}`).join('L')}L${pts.slice().reverse().map((p, i) => `${X(lx[pts.length - 1 - i]).toFixed(1)},${Y(p.low).toFixed(1)}`).join('L')}Z" fill="#3fb950" opacity=".18"/>`;
+    s += `<path d="M${pts.map((p, i) => `${X(lx[i]).toFixed(1)},${Y(p.median).toFixed(1)}`).join('L')}" fill="none" stroke="#7ee787" stroke-width="2"/>`;
+    pts.forEach((p, i) => {
+      s += p.current ? `<circle cx="${X(lx[i])}" cy="${Y(p.median)}" r="7" fill="#f5c518" stroke="#151515" stroke-width="2" data-i="${i}"/>`
+        : `<circle cx="${X(lx[i])}" cy="${Y(p.median)}" r="4.5" fill="#7ee787" stroke="#151515" stroke-width="2" data-i="${i}"/>`;
+    });
+    s += `<text x="${L - 6}" y="${Y(ymax / 1.05) + 4}" text-anchor="end">${fmt(ymax / 1.05)}</text><text x="${L - 6}" y="${H - B + 4}" text-anchor="end">0</text>`;
+    const cur = pts.find(p => p.current), drop = pts.find(p => p.drop);
+    s += `<text x="${X(xmin)}" y="${H - B + 16}" text-anchor="start">Nv ${fmt(pts[0].level)}${pts[0].drop ? ' (hunt)' : ''}</text><text x="${X(xmax)}" y="${H - B + 16}" text-anchor="end">Nv ${fmt(pts.at(-1).level)}</text>`;
+    // O nível deste pokémon vai acima do ponto amarelo (no eixo ele encostava no último nível)
+    if (cur) { const cx = X(Math.log(cur.level)), al = cx > W - Rm - 40 ? 'end' : cx < L + 40 ? 'start' : 'middle';
+      s += `<text x="${cx}" y="${Y(cur.median) - 12}" text-anchor="${al}" style="fill:#f5c518;font-weight:700">Nv ${fmt(cur.level)}</text>`; }
+    s += `<text x="${(L + W - Rm) / 2}" y="${H - 4}" text-anchor="middle">Nível →</text></svg>`;
+    host.innerHTML = s;
+    host.querySelector('svg').addEventListener('mousemove', ev => {
+      const c = ev.target.closest?.('circle[data-i]');
+      if (!c) return esconderTip();
+      const p = pts[Number(c.dataset.i)];
+      mostrarTip(ev, `Nv ${fmt(p.level)}${p.drop ? ' (nível da hunt)' : ''}${p.current ? ' (este pokémon)' : ''}\nPreço justo ${fmt(p.median)} gemas\nVender rápido ${fmt(p.low)} · Esperar ${fmt(p.high)}`);
+    });
+    host.querySelector('svg').addEventListener('mouseleave', esconderTip);
+    const prox = pts.find(p => p.level > r.level);
+    $('legNivel').innerHTML = `A mesma ficha em outros níveis, com os Adicionais. Começa ${drop ? `no Nv ${fmt(drop.level)}, o nível da hunt` : 'no nível mais baixo vendido'}; a curva do nível é a mesma para todas as espécies.` +
+      (prox && cur ? `<br>Se upar antes de vender: Nv ${fmt(prox.level)} ≈ ${fmt(prox.median)} gemas (${prox.median >= cur.median ? '+' : ''}${pct(prox.median / cur.median - 1)}).` : '');
+  }
+
+  // ---- Tabela: as vendas da cadeia que mais pesaram (10 primeiras, "Mostrar mais")
+  let compsAbertas = false;
+  function tabelaComps(r) {
+    const host = $('tComps'), lista = r.comps || [];
+    if (!lista.length) { host.innerHTML = '<div class="mut peq">Nenhuma venda da própria cadeia pesou: o preço veio de espécies parecidas.</div>'; return; }
+    const ver = compsAbertas ? lista : lista.slice(0, 10);
+    const pr = x => (x >= 0.001 ? (x * 100).toLocaleString('pt-BR', { maximumFractionDigits: x >= 0.1 ? 0 : 1 }) + '%' : '< 0,1%');
+    host.innerHTML = `<table><tr><th>Forma</th><th class="r" title="A fatia desta venda no peso do cálculo (nível, Poder, Nota e data)">Peso</th><th class="r">Nível</th><th class="r">Nota</th><th class="r">Poder</th><th class="r">Data</th><th class="r">Gemas</th><th>Observação</th></tr>` +
+      ver.map(x => `<tr><td>${icone(x.speciesId, 22)} ${esc(x.name)}${x.shiny ? ' ✨' : ''}</td><td class="r">${pr(x.share)}</td><td class="r">${fmt(x.level)}</td><td class="r">${x.nota != null ? dec(x.nota) : '–'}</td><td class="r">${fmt(x.pve)}</td><td class="r">${quando(x.at)}</td><td class="r">${fmt(x.price)}</td><td class="mut">${[x.uncertain ? 'Adicional incerto' : '', x.aprox ? 'IVs aproximados' : ''].filter(Boolean).join(' · ')}</td></tr>`).join('') + '</table>' +
+      (lista.length > 10 ? `<button class="mais" id="maisComps">${compsAbertas ? 'Mostrar menos' : `Mostrar mais (${lista.length - 10})`}</button>` : '');
+    const b = $('maisComps');
+    if (b) b.onclick = () => { compsAbertas = !compsAbertas; tabelaComps(r); };
+  }
+
+  // ---- Como é calculado, e quão bem funcionou (o teste com as vendas recentes)
+  function explicacao(r) {
+    const cal = S?.calib?.pronto ? S.calib : null, share = Math.round((r.weight || 0) * 100);
+    let h = `<details><summary>Como o preço e a confiança são calculados</summary>
+      <p><b>Preço justo: ${fmt(r.median)} gemas.</b> É o valor do meio das vendas parecidas, ajustadas para a ficha deste pokémon, com os Adicionais somados. Vender rápido e Esperar marcam a faixa onde saiu a metade central delas.</p>
+      <p><b>Quais vendas contam.</b> As vendas em gemas que o Monitor de Pokémons guardou nos últimos 30 dias; shiny só se compara com shiny. Pesam mais as vendas de Poder, Nota e nível parecidos e as mais recentes. A cadeia de ${esc(r.family)} reúne as vendas de todas as formas dela (e da Mega, com o valor da pedra descontado). Com poucas vendas parecidas, entram outras espécies com bem menos peso: primeiro as com os mesmos dois tipos, depois com um tipo em comum, depois todas.</p>
+      <p><b>Poder, Nota e nível.</b> O Poder é o "Poder no PvE" do jogo, calculado como ${esc(r.family)}${r.mega ? ' (sem a Mega; o valor da pedra entra no fim, como Adicional)' : ''} no Nv 100. A Nota e o nível são os da ficha.</p>
+      <p><b>Peso neste preço.</b> ${share}% do cálculo vem das ${fmt(r.familyCount)} vendas da cadeia de ${esc(r.family)}; os outros ${100 - share}% vêm das demais vendas. É o peso no cálculo, não a quantidade de vendas.</p>
+      <p><b>Referência do mercado.</b> Todas as vendas do mesmo tipo (shiny ou não) formam uma curva de quanto o mercado paga por Poder, Nota e nível. De cada venda entra só o quanto ela saiu acima ou abaixo dessa curva, e não o preço: é assim que outra espécie ajuda sem copiar o preço dela.</p>
+      <p><b>Pesos.</b> Uma venda de duas semanas atrás vale metade de uma de hoje. Uma venda com Poder 19% diferente, ou com Nota 0,35 diferente, também vale metade.</p>` +
+      (cal ? `<p><b>Correção.</b> Nas vendas dos últimos ${cal.dias} dias, o cálculo saía ${pct(Math.abs(Math.exp(cal.bias) - 1))} ${cal.bias > 0 ? 'acima' : 'abaixo'} do valor pago (na mediana). Esse desvio já vem descontado dos três números.</p>` : '') +
+      `<p><b>Adicionais.</b> Cada um conta 10 unidades do item (fragmentos de Z-Move ou de AoE, pedras Mega) pela mediana do menor anúncio do dia, lida pelo Monitor de Preços. O valor sai de cada venda antes da comparação e volta no fim, pelo preço de hoje.</p>
+      <p><b>Adicional incerto.</b> A Tabela de preços do jogo mostra o Z-Move e o AoE de quando se lê, não os da venda. O app lê as vendas a cada 20 minutos; a lida mais de 2 horas depois fica incerta, e o valor dos Adicionais dela não é descontado.${r.uncertain?.family ? ` Aqui, ${fmt(r.uncertain.family)} das ${fmt(r.familyCount)} vendas da cadeia estão nesse caso.` : ''}</p>
+      <p><b>IVs aproximados.</b> As vendas guardadas por versões anteriores do app têm só a soma dos IVs: nelas, o Poder usa os IVs espalhados por igual. Elas saem da conta depois de 30 dias.</p>
+      <p><b>Refino.</b> Não entra no Poder: vendas refinadas contam como se não tivessem refino.</p>`;
+    if (cal?.teste) {
+      const t = cal.teste;
+      h += `<p><b>Quão bem isso funcionou.</b> Calculamos o preço de ${fmt(t.vendas)} vendas dos últimos ${cal.dias} dias, cada uma só com as vendas de antes dela, como se fosse a primeira vez:</p>
+        <ul><li>${pct(t.dentroDaFaixa)} saíram entre Vender rápido e Esperar.</li><li>${pct(t.ate25)} saíram a até 25% do Preço justo.</li>
+        <li>Em metade das vendas, o preço pago ficou a até ${dec(t.erroMediano, 1)} vez do Preço justo, para mais ou para menos.</li></ul>
+        <div class="pilha" role="img" aria-label="${pct(t.abaixo)} abaixo de Vender rápido, ${pct(t.dentroDaFaixa)} na faixa, ${pct(t.acima)} acima de Esperar"><i style="flex:${t.abaixo};background:#6e6e78"></i><i style="flex:${t.dentroDaFaixa};background:#3fb950"></i><i style="flex:${t.acima};background:#6e6e78"></i></div>
+        <div class="leg">${pct(t.abaixo)} abaixo de Vender rápido · ${pct(t.dentroDaFaixa)} entre Vender rápido e Esperar · ${pct(t.acima)} acima de Esperar</div>
+        <p>O mercado é feito por jogadores e varia muito; dois pokémon quase iguais podem sair por preços bem diferentes no mesmo dia. Use a faixa entre Vender rápido e Esperar, não só o número do meio.</p>`;
+      const fx = (cal.conferencia?.faixas || []).filter(f => f.vendas >= 30);
+      if (fx.length) h += `<p><b>A confiança acerta?</b> Deixamos de fora as vendas dos ${cal.conferencia.dias} últimos dias, ajustamos a confiança com os dias anteriores e comparamos o que ela dizia com o que aconteceu nesses dias.</p>
+        <table style="max-width:420px"><tr><th>Confiança dita</th><th class="r">Vendas</th><th class="r">Saíram a até 25%</th></tr>${fx.map(f => `<tr><td>${f.confianca}%</td><td class="r">${fmt(f.vendas)}</td><td class="r">${pct(f.acerto)}</td></tr>`).join('')}</table>
+        <p class="mut peq">Faixas com menos de 30 vendas ficam de fora.</p>`;
+    } else if (S?.calibrando) h += '<p class="mut">A calibração com as vendas recentes está rodando; os números de acerto aparecem quando ela terminar.</p>';
+    return h + '</details>';
+  }
+
+  // ---- Controles
+  document.querySelectorAll('#modo button').forEach(b => {
+    b.onclick = () => {
+      op.modo = b.dataset.v; guardar();
+      document.querySelectorAll('#modo button').forEach(x => x.classList.toggle('on', x === b));
+      const contas = op.modo === 'contas';
+      $('lista').hidden = !contas; $('ctlContas').hidden = !contas; $('ctlBusca').hidden = !contas; $('ctlTodos').hidden = !contas; $('colar').hidden = contas;
+    };
+  });
+  document.querySelector(`#modo button[data-v="${op.modo}"]`)?.click();
+  $('busca').oninput = () => { op.busca = $('busca').value; desenharLista(); };
+  $('ordem').value = op.ordem;
+  $('ordem').onchange = () => { op.ordem = $('ordem').value; guardar(); desenharLista(); };
+  $('todos').checked = !!op.todos;
+  $('todos').onchange = () => { op.todos = $('todos').checked; guardar(); desenharLista(); };
+  $('recarregar').onclick = () => { LOTE.clear(); lerContas(); };
+  $('lnk').onclick = () => {};
+  $('lnk').title = 'github.com/briaoAle/precificador-pokemon';
+
+  api.onPrJogo(d => {
+    J = d?.especies ? d : null;
+    let st = $('st-ico');
+    if (!st) { st = document.createElement('style'); st.id = 'st-ico'; document.head.appendChild(st); }
+    st.textContent = (J?.icones?.png ? `.ico{background-image:url("${J.icones.png}")}` : '') + (J?.sprites?.png ? `.spr{background-image:url("${J.sprites.png}")}` : '');
+    desenharLista();
+  });
+  api.onPrState(s => {
+    const antes = S;
+    S = s;
+    info();
+    // Vendas novas ou calibração nova: os preços da lista são refeitos
+    const v = `${s.vendas}|${s.calib?.em || 0}|${s.aprox}|${JSON.stringify(s.unidades || {})}`;
+    if (versaoDados && v !== versaoDados) { LOTE.clear(); desenharLista(); pedirLote(); }
+    versaoDados = v;
+    if (R && antes?.calib?.em !== s.calib?.em && ultimoAlvo) precificar(ultimoAlvo, ultimoExtra);
+  });
+  // A ficha que veio do jogo (💲 Precificar na ficha): cola, marca o Z-Move e o AoE dos selos e precifica
+  let fichaEspera = null;
+  const precificarFicha = d => {
+    if (!J) { fichaEspera = d; return; }
+    document.querySelector('#modo button[data-v="colar"]').click();
+    $('texto').value = d.texto || '';
+    $('zmove').checked = !!d.z;
+    $('aoe').checked = !!d.aoe;
+    $('precificarTexto').click();
+  };
+  api.onPrFicha(precificarFicha);
+  api.onPrJogo(() => { if (fichaEspera) { const d = fichaEspera; fichaEspera = null; setTimeout(() => precificarFicha(d), 0); } });
+  lerContas();
+</script>
+</body>
+</html>

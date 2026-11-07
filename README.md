@@ -1,6 +1,6 @@
 # PokeMulti
 
-Programa para Windows que abre até 4 contas do pokeidle.io em uma janela, com Sniper do Mercado, histórico de preços e a hunt que mais rende para o seu pokémon.
+Programa para Windows que abre até 4 contas do pokeidle.io em uma janela, com Sniper do Mercado, histórico de preços, Precificador de pokémon e a hunt que mais rende para o seu pokémon.
 
 **[Baixar a última versão](https://github.com/negronesdev/pokemulti/releases/latest/download/PokeMulti-Setup.exe)** · [Site](https://pokemulti.app) · [Código do programa](codigo) · [Todas as versões](https://github.com/negronesdev/pokemulti/releases) · [Termos de uso](https://pokemulti.app/termos.html)
 
@@ -20,9 +20,9 @@ A pasta [`codigo`](codigo) tem o código do programa, o mesmo que vira o instala
 
 O instalador é feito a partir desse código, com os comentários retirados e o código compactado. Se preferir, rode direto do código: instale o [Node.js](https://nodejs.org), abra um terminal na pasta `codigo` e rode `npm install` e depois `npm start`.
 
-Para conferir se o instalador que você baixou é o original, compare a impressão digital dele. No PowerShell, na pasta do download, rode `Get-FileHash .\PokeMulti-Setup.exe`. A da versão 1.0.1 é esta (maiúsculas ou minúsculas, tanto faz):
+Para conferir se o instalador que você baixou é o original, compare a impressão digital dele. No PowerShell, na pasta do download, rode `Get-FileHash .\PokeMulti-Setup.exe`. A da versão 1.1.0 é esta (maiúsculas ou minúsculas, tanto faz):
 
-`c5d51a687129b4f4fc3984bc79f123bb1210534240acdd97fdfccd9fd15acfb8`
+`fce396f4ad7c546f8e2ff43e8754cae9e9d325678c75d7b92121f6deb9b9c76a`
 
 ## O Windows mostrou um aviso
 
@@ -42,4 +42,4 @@ O instalador ainda não tem certificado pago. Se aparecer "O Windows protegeu o 
 
 ## Direitos
 
-O código está aberto para leitura e conferência, e você pode rodá-lo no seu PC. Todos os direitos são reservados: não é permitido redistribuir, vender ou publicar cópias do programa, alteradas ou não. O arquivo `codigo/qrcode.js` é de Kazuhiko Arase, com licença MIT, e mantém o aviso original.
+O código está aberto para leitura e conferência, e você pode rodá-lo no seu PC. Todos os direitos são reservados: não é permitido redistribuir, vender ou publicar cópias do programa, alteradas ou não. O arquivo `codigo/qrcode.js` é de Kazuhiko Arase, com licença MIT, e mantém o aviso original. O cálculo do Precificador (`codigo/precificador.js`) vem do [Precificador de Pokémon](https://github.com/briaoAle/precificador-pokemon) de briaoAle, com licença MIT, e o aviso original está no fim do arquivo.

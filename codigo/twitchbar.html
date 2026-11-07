@@ -19,6 +19,10 @@
   #conta { max-width:130px; min-width:40px; flex-shrink:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   #bau { opacity:.6; white-space:nowrap; }
   #bau.ligado { opacity:1; border-color:#2fbf71; color:#5cf29a; }
+  #pausa.pausado { background:#f5c518; border-color:#f5c518; color:#000; font-weight:700; }
+  .pausadas { margin:6px 2px; padding:10px; border-radius:8px; background:#2a2414; border:1px solid #6b5a1f; color:#f3e3b0; line-height:1.5; }
+  .pausadas b { color:#fff; }
+  .pausadas button { margin-top:8px; background:#f5c518; border-color:#f5c518; color:#000; font-weight:700; }
   #conta.entrar { background:var(--on); border-color:var(--on); font-weight:600; }
   #kick.entrar { background:#53fc18; border-color:#53fc18; color:#000; font-weight:700; }
   .row .pl { font-size:10px; font-weight:800; width:14px; height:14px; line-height:14px; text-align:center;
@@ -57,6 +61,7 @@
   <button id="ouvindo" style="display:none"></button>
   <span class="qtd" id="qtd"></span>
   <button id="bau"></button>
+  <button id="pausa"></button>
   <button id="auto" style="display:none">🔄</button>
   <button id="lst" title="Mostrar/esconder a lista de lives"></button>
   <button id="add" title="Abrir uma live (nome do canal ou link)">+</button>
@@ -87,7 +92,7 @@
       $('ouvindo').title = `Ouvindo ${o.nome} (${o.contaNome}). Clique para parar o som.`;
     }
     const n = st.canais.length;
-    $('qtd').textContent = n ? `${n} live${n > 1 ? 's' : ''}` : '';
+    $('qtd').textContent = st.pausado ? '' : n ? `${n} live${n > 1 ? 's' : ''}` : '';
     $('lst').textContent = st.lista ? '▲' : '▼';
     $('lst').style.display = n ? '' : 'none';
 
@@ -110,7 +115,25 @@
         (a.proxima ? `\nPróxima: ${hora(a.proxima)}` : '');
     }
 
+    // ⏸ Lives pausadas: nenhuma página aberta, e o app não abre nem troca lives até retomar
+    $('pausa').textContent = st.pausado ? '▶' : '⏸';
+    $('pausa').className = st.pausado ? 'pausado' : '';
+    $('pausa').title = st.pausado
+      ? 'Lives pausadas. Clique para retomar: o app reabre as lives e já confere as que têm mais pontos.'
+      : 'Pausar as lives: fecha todas (a lista de canais fica guardada) e o app para de abrir, trocar e clicar no baú até você retomar. Continua pausado mesmo fechando o app.';
+    $('auto').disabled = !!st.pausado;
+    $('bau').disabled = !!st.pausado;
     lista.innerHTML = '';
+    if (st.pausado) {
+      const v = document.createElement('div');
+      v.className = 'pausadas';
+      v.innerHTML = `<b>⏸ Lives pausadas.</b><br>Nenhuma live aberta: o app não abre, não troca e não clica no baú até você retomar.` +
+        (st.total ? `<br>${st.total} canal${st.total > 1 ? 'is' : ''} guardado${st.total > 1 ? 's' : ''}: volta${st.total > 1 ? 'm' : ''} ao retomar.` : '') +
+        `<br>Abrir um canal pelo + ou pelo jogo também retoma.<br><button id="retomar">▶ Retomar as lives</button>`;
+      lista.appendChild(v);
+      v.querySelector('#retomar').onclick = () => api.twPausa();
+      return;
+    }
     if (!n) {
       const v = document.createElement('div');
       v.className = 'vazio';
@@ -177,6 +200,7 @@
   $('lst').onclick = () => api.twLista();
   $('auto').onclick = () => api.twAuto();
   $('bau').onclick = () => api.twBau();
+  $('pausa').onclick = () => api.twPausa();
   $('ouvindo').onclick = () => api.twPararOuvir();
 
   api.onTwState(s => { st = s; render(); });

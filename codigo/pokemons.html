@@ -104,6 +104,7 @@
   <b>🐉 Monitor de Pokémons do RMT</b>
   <span class="mut" id="info"></span>
   <span class="sp"></span>
+  <button id="precificar" title="Quanto pedir, em gemas, por um pokémon das suas contas ou por uma ficha colada: Vender rápido, Preço justo e Esperar">💲 Precificar</button>
   <button id="cfg">⚙ Configurar</button>
   <button id="agora" title="Busca vendas novas, a grade de espécies e avalia as observadas agora">Atualizar agora</button>
 </header>
@@ -933,6 +934,7 @@
   $('busca').oninput = () => { op.busca = $('busca').value; render(); };
   $('cfg').onclick = () => { $('opcoes').classList.toggle('aberto'); $('cfg').classList.toggle('on'); };
   $('agora').onclick = () => api.pkAgora();
+  $('precificar').onclick = () => api.prAbrir();
   $('verAtq').onclick = () => { op.vista = op.vista === 'atacantes' ? 'especie' : 'atacantes'; render(); };
   for (const k of ['vendasMin', 'gradeMin', 'avaliarMin', 'alertaPct', 'minVendas']) $('o-' + k).onchange = () => api.pkOpcoes({ [k]: Number($('o-' + k).value) });
   $('o-alertas').onchange = () => api.pkOpcoes({ alertas: $('o-alertas').checked });

@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const licenca = require('./licenca.js');
+const PR = require('./precificador.js'); // o 💲 Precificador (preço de um pokémon em gemas)
 
 // ---------- Pasta de dados em Documentos ----------
 // Os dados (logins, lives, config) ficam em Documentos\PokeMulti-dados, e não no AppData.
@@ -58,6 +59,7 @@ const defaults = {
   grid: false,             // modo grade: as 4 contas visíveis ao mesmo tempo (2x2)
   gridZoom: 0.6,           // zoom do jogo dentro de cada quadro no modo grade
   gridFps: 15,             // limite de quadros/s das contas NÃO selecionadas no modo grade (0 = sem limite)
+  fpsVista: 30,            // limite de quadros/s da conta à vista (0 = sem limite); 30 desde 06/11/2026, pedido do usuário
   // Painel da Twitch: por conta, as lives abertas ({ login, video }) e qual está à vista
   twitch: { open: false, lista: true, canais: [[], [], [], []], ativo: ['', '', '', ''] },
   caixa: { ligado: false },
@@ -158,7 +160,10 @@ const FPS_SCRIPT = `(() => {
   };
 })();`;
 
-const fpsFor = i => (cfg.grid && i !== active ? cfg.gridFps : 0);
+// A conta à vista (e a selecionada na grade) desenha a 30 quadros/s desde 06/11/2026 (pedido do usuário depois da análise:
+// com a janela à frente, ela era 0,5 a 0,8 núcleo e a placa de vídeo outros 0,55 a 0,75). O botão direito no 🍃 troca
+// para sem limite. As não selecionadas na grade seguem o 🎞.
+const fpsFor = i => (cfg.grid && i !== active ? cfg.gridFps : (cfg.fpsVista ?? 30));
 function applyFps(wc, i) {
   if (wc.isDestroyed()) return;
   wc.executeJavaScript(`${FPS_SCRIPT}; window.__pkmFps.limit = ${Number(fpsFor(i)) || 0};`).catch(() => {});
@@ -215,7 +220,9 @@ function pushState() {
     grid: cfg.grid,
     gridZoom: cfg.gridZoom,
     gridFps: cfg.gridFps,
+    fpsVista: cfg.fpsVista ?? 30,
     twitchOpen: cfg.twitch.open,
+    twitchPausado: !!cfg.twitch.pausado,
     votos: votos.map(v => !!v?.pode),
     caixa: caixaNivelBarra(),
     loading: views.map(v => !v.webContents.isDestroyed() && v.webContents.isLoading()),
@@ -265,8 +272,10 @@ const normCanal = c => {
 
 function twCreate(i, c) {
   const part = `persist:conta${i + 1}`;
+  // A Twitch tem um preload: a página diz que não decodifica AV1 nem HEVC (ver twitch-preload.js)
   const v = new WebContentsView({
-    webPreferences: { partition: part, backgroundThrottling: false, spellcheck: false, contextIsolation: true, sandbox: true }
+    webPreferences: { partition: part, backgroundThrottling: false, spellcheck: false, contextIsolation: true, sandbox: true,
+      ...(c.plat === 'twitch' ? { preload: path.join(__dirname, 'twitch-preload.js') } : {}) }
   });
   v.setBackgroundColor('#0e0e10');
   const wc = v.webContents;
@@ -315,6 +324,7 @@ function abrirPopupNaSessao(part) {
 function twAdd(i, raw, { show = true } = {}) {
   const p = typeof raw === 'object' ? raw : lerCanal(raw);
   if (!p || i < 0 || i >= TOTAL) return false;
+  if (cfg.twitch.pausado) twRetomar(`abriu ${p.login}`); // quem abre um canal quer as lives de volta
   const id = canalId(p);
   const lista = cfg.twitch.canais[i];
   if (!lista.some(c => canalId(c) === id)) lista.push({ login: p.login, plat: p.plat, video: true });
@@ -512,6 +522,17 @@ const HUNT_ESCUTA = `(() => {
     const tm = await import('/shared/tm-elemental.mjs').catch(() => null);
     return lista.filter(c => c.heroi?.stats).map(({ heroiEm, xpTr, heroi: { tmElemental, tmFisico, ...h }, ...c }) =>
       ({ ...c, heroi: { ...h, zmove: tmElemental && tm ? tm.golpeTmElemental(tmElemental, tmFisico) : null } }));
+  };
+  // Os pokémon da conta para o 💲 Precificador: a coleção do estado (a equipe tem slot 0 a 4), os IVs em 6 letras
+  window.__pkmMeusPokemons = () => {
+    const eu = window.__pkmEu;
+    if (!eu) return null;
+    const K = ['hp', 'atk', 'def', 'spAtk', 'spDef', 'speed'];
+    const iv = o => o && K.every(k => Number.isInteger(o[k]) && o[k] >= 1 && o[k] <= 32) ? K.map(k => (o[k] - 1).toString(32)).join('') : null;
+    const refino = r => { if (typeof r === 'string') { try { r = JSON.parse(r); } catch (e) { r = null; } } return !!r && typeof r === 'object' && Object.values(r).some(x => Number(x) > 0); };
+    return (eu.pokemons || []).map(p => ({ id: p.id, sp: p.speciesId, nome: p.nome || '', lv: p.level, sh: !!p.shiny, pot: p.potencia,
+      q: p.quality ?? p.qualidade, ivs: iv(p.ivs), z: p.tmElemental || '', zf: p.tmFisico === true, aoe: !!(p.tmAoe ?? p.tm_aoe),
+      ref: refino(p.refino), slot: p.slot ?? null, ativo: p.id === eu.activeId }));
   };
   window.__pkmHuntDados = async () => {
     const eu = window.__pkmEu, base = window.__pkmHuntBase;
@@ -1622,8 +1643,11 @@ async function vendTick() {
 // A grade e a vitrine passam pela tela do jogo: com o Mercado aberto na Conta 1 elas esperam.
 // Vendas guardadas como linhas compactas (90 dias):
 //   [idVenda, em, especie, preco, moeda(0=coins,1=gemas), nota, nivel, shiny, potencia, ivTotal, qualidade, tm,
-//    vendedor, comprador (índices em `contas`), transferência entre contas (1/0)]
+//    vendedor, comprador (índices em `contas`), transferência entre contas (1/0),
+//    ivs, tmElemental, marcas, minutos até a leitura]
 // Vendedor e comprador só existem a partir de 26/10/2026; as vendas de antes ficam sem as três últimas posições.
+// As quatro últimas (para o 💲 Precificador) existem desde 06/11/2026, ver pkmFichaExtra; as de antes recebem as três
+// primeiras pela busca por espécie (pkmCompletarFichas).
 const PKM_DIAS = 90;
 const pkmPath = () => path.join(app.getPath('userData'), 'pokemons.json');
 let pkmCache = null, pkmWin = null, pkmOcupado = false, pkmAviso = '';
@@ -1657,6 +1681,10 @@ function pkmLer() {
   pkmCache.avisados ??= {};       // idAnuncio -> preço avisado
   pkmCache.contas ??= [];         // nomes de vendedor/comprador; as vendas guardam o índice
   pkmCache.buracos ??= [];        // [[de, ate]]: trechos em que faltam vendas (ver pkmColetarVendas)
+  // A mesma venda duas vezes (achado em 06/11/2026: 31 vendas repetidas, linha igual, de antes): fica a primeira
+  const vistas = new Set(), antes = pkmCache.vendas.length;
+  pkmCache.vendas = pkmCache.vendas.filter(v => (vistas.has(v[0]) ? false : (vistas.add(v[0]), true)));
+  if (pkmCache.vendas.length < antes) appLog(`pokémons: ${antes - pkmCache.vendas.length} vendas repetidas tiradas`);
   pkmMarcarTransferencias(pkmCache);
   return pkmCache;
 }
@@ -1717,6 +1745,117 @@ function pkmGravar() {
   try { fs.writeFileSync(pkmPath(), JSON.stringify(pkmCache)); } catch (e) { appLog(`pokémons: não gravei (${e.message})`); }
 }
 
+// O que o 💲 Precificador precisa de cada venda, além do que o Monitor sempre guardou (posições 15 a 18): os 6 IVs
+// em 6 letras (o IV − 1 em base 32, na ordem hp atk def spAtk spDef speed), o tipo do Z-Move, as marcas (1 AoE,
+// 2 Z-Move físico, 4 refino, 8 TM incerto, 16 ficha completada depois) e quantos minutos depois da venda ela foi
+// lida. A ficha da Tabela de preços é a de QUANDO SE LÊ: um TM posto depois da venda não estava no preço.
+const temRefino = r => {
+  if (typeof r === 'string') { try { r = JSON.parse(r); } catch { return false; } }
+  return !!r && typeof r === 'object' && Object.values(r).some(x => Number(x) > 0);
+};
+const pkmFichaExtra = (f, em, lidaEm) => [PR.ivsParaTexto(f.ivs), f.tmElemental ? String(f.tmElemental) : '',
+  ((f.tmAoe ?? f.tm_aoe) ? 1 : 0) | (f.tmFisico === true ? 2 : 0) | (temRefino(f.refino) ? 4 : 0),
+  Math.max(0, Math.round((lidaEm - em) / 60000))];
+
+// COMPLETAR AS FICHAS (06/11/2026): as vendas guardadas antes do Precificador têm só a SOMA dos IVs, e o Poder
+// precisa dos seis. A Tabela de preços do jogo busca por espécie (`busca`) nos últimos 30 dias, até 41 páginas de 30
+// (shared/tabela-precos.mjs), e cada venda volta com a ficha inteira: o app procura cada venda guardada pelo id e
+// completa os IVs. Uma espécie por vez, uma página a cada 4 s, nunca junto com a coleta do Monitor; é uma vez só
+// (cada espécie fica marcada em `completar`), e as vendas novas já chegam completas. Espécie com mais de 41 páginas
+// tenta também a ordem das mais caras e a das mais baratas. Do Z-Move e do AoE, a ficha de hoje só vale se a venda
+// já tinha TM quando foi lida (posição 11); se hoje ela tem os dois, ou nenhum, o TM fica incerto (marca 8).
+const PKM_COMPLETAR_MS = process.env.PKM_COMPLETAR_TESTE === '1' ? 50 : 4000;
+let pkmCompletando = false;
+async function pkmCompletarFichas() {
+  return; // edição de venda: desligada
+  if (pkmCompletando || pkmOcupado || !jogoLer()) return;
+  const p = pkmLer();
+  const c = (p.completar ??= { especies: {}, linhas: 0 });
+  if (c.desligado) return;
+  const corte = Date.now() - 30 * 864e5;
+  const faltam = new Map(), maisVelha = new Map();
+  for (const v of p.vendas) {
+    if (v[4] !== 1 || v[1] < corte || v[15] != null || c.especies[v[2]]) continue;
+    faltam.set(v[0], v);
+    maisVelha.set(v[2], Math.min(maisVelha.get(v[2]) ?? Infinity, v[1]));
+  }
+  if (!faltam.size) return;
+  pkmCompletando = true;
+  let paginas = 0, achadas = 0, feitas = 0;
+  try {
+    // As espécies com mais vendas primeiro (o nome mais longo antes, quando um nome está dentro do outro)
+    const fila = [...maisVelha.keys()].map(id => ({ id, nome: p.especies[id] || jogoLer()?.especies?.[id]?.n || '', n: [...faltam.values()].filter(v => v[2] === id).length }))
+      .filter(e => e.nome).sort((a, b) => b.n - a.n || b.nome.length - a.nome.length);
+    for (const e of fila) {
+      if (c.especies[e.id]) continue; // completada junto com outra
+      let achouAqui = 0, parou = '', seguir = false;
+      for (const ordem of ['recentes', 'baratos', 'caros']) {
+        // A próxima ordem só quando a anterior bateu nas 41 páginas sem cobrir tudo, e ainda falta venda desta espécie
+        if (ordem !== 'recentes' && (!seguir || ![...faltam.values()].some(v => v[2] === e.id))) break;
+        for (let pg = 0; pg < 41; pg++) {
+          while (pkmOcupado) await espera(2000);
+          const msg = { t: 'market.historicoGlobal', tipo: 'pokemon', moeda: 'orb', busca: e.nome, pagina: pg, seq: ++pkmSeq };
+          if (ordem !== 'recentes') msg.ordem = ordem;
+          const r = await pkmPedir(msg, 'historicoGlobal');
+          paginas++;
+          if (r?.erro) { parou = r.erro; break; }
+          const linhas = (r.linhas || []).filter(l => l.tipo === 'pokemon' && l.ficha);
+          // A busca tem de filtrar: se nenhuma venda da página tem o nome buscado, o jogo ignorou a busca
+          if (linhas.length && !linhas.some(l => String(l.ficha.nome || '').toLowerCase().includes(e.nome.toLowerCase()))) {
+            c.desligado = `a busca por espécie não filtrou (${e.nome})`;
+            appLog(`pokémons: completar fichas DESLIGADO: ${c.desligado}`);
+            return;
+          }
+          let velha = Infinity;
+          for (const l of linhas) {
+            velha = Math.min(velha, l.em);
+            const v = faltam.get(l.id);
+            if (!v || !pkmCompletarLinha(v, l.ficha)) continue;
+            faltam.delete(l.id);
+            achadas++; achouAqui++;
+          }
+          // Chegou às mais velhas que faltam, ou acabaram as vendas: a busca cobriu tudo. Na 41ª página o jogo para (e
+          // diz que não tem mais): com a página cheia e sem ter chegado às mais velhas, bateu no teto.
+          if (!linhas.length || (ordem === 'recentes' && velha < (maisVelha.get(e.id) ?? 0))) { seguir = false; break; }
+          if (pg === 40) { seguir = linhas.length >= 30; break; }
+          if (!r.temMais) { seguir = false; break; }
+          await espera(PKM_COMPLETAR_MS);
+        }
+        if (parou) break;
+      }
+      if (parou) { appLog(`pokémons: completar fichas parou em ${e.nome} (${parou}); tenta de novo depois`); break; }
+      c.especies[e.id] = 1;
+      feitas++;
+      c.linhas = (c.linhas || 0) + achouAqui;
+      if (feitas % 10 === 0) { pkmGravar(); prEnviar(); }
+      await espera(PKM_COMPLETAR_MS);
+    }
+  } finally {
+    pkmCompletando = false;
+    if (feitas || achadas) {
+      pkmGravar();
+      prEnviar();
+      appLog(`pokémons: completei a ficha de ${achadas} vendas (${feitas} espécies, ${paginas} páginas); faltam ${faltam.size}`);
+    }
+  }
+}
+// Uma venda guardada ganha os IVs (e o TM, se ela já tinha TM quando foi lida) da ficha de hoje
+function pkmCompletarLinha(v, f) {
+  const ivs = PR.ivsParaTexto(f.ivs);
+  if (!ivs) return false;
+  const zHoje = f.tmElemental ? String(f.tmElemental) : '', aoeHoje = !!(f.tmAoe ?? f.tm_aoe);
+  let z = '', marcas = 16 | (temRefino(f.refino) ? 4 : 0);
+  if (v[11] === 1) {
+    if (zHoje && aoeHoje || !zHoje && !aoeHoje) marcas |= 8;
+    z = zHoje;
+    if (aoeHoje) marcas |= 1;
+    if (f.tmFisico === true) marcas |= 2;
+  }
+  while (v.length < 15) v.push(v.length === 14 ? 0 : null);
+  v[15] = ivs; v[16] = z; v[17] = marcas; v[18] = null;
+  return true;
+}
+
 async function pkmPedir(msg, aba) {
   const wc = views[PRECO_CONTA]?.webContents;
   if (!wc || wc.isDestroyed()) return { erro: 'sem a conta 1' };
@@ -1741,6 +1880,7 @@ async function pkmColetarVendas() {
   for (; pg < maxPaginas; pg++) {
     const r = await pkmPedir({ t: 'market.historicoGlobal', tipo: 'pokemon', pagina: pg, seq: ++pkmSeq }, 'historicoGlobal');
     if (r?.erro) { parou = r.erro; break; }
+    const lidaEm = Date.now();
     for (const v of r.linhas || []) {
       if (v.tipo !== 'pokemon' || !v.ficha) continue;
       if (v.id <= p.ultimaVenda) { encostou = true; continue; }
@@ -1751,7 +1891,7 @@ async function pkmColetarVendas() {
       p.especies[f.speciesId] ??= f.nome;
       p.vendas.push([v.id, v.em, f.speciesId, Number(v.bruto) || 0, v.moeda === 'orb' ? 1 : 0, f.nota ?? null, f.level ?? null,
         f.shiny ? 1 : 0, f.potencia ?? null, f.ivTotal ?? null, f.quality ?? null, (f.tmElemental || f.tmAoe) ? 1 : 0,
-        idxConta(p, v.vendedor), idxConta(p, v.comprador), 0]);
+        idxConta(p, v.vendedor), idxConta(p, v.comprador), 0, ...pkmFichaExtra(f, v.em, lidaEm)]);
       maior = Math.max(maior, v.id);
       novas++;
     }
@@ -2030,14 +2170,17 @@ async function pkmTalvezColetar(forcar = null) {
     pkmEnviar();
     ecEnviar();
     pkmRodarPendente(); // um pedido da janela que chegou durante a coleta
+    prEnviar();
   }
 }
 
+// As janelas do Monitor e da Economia leem só as 15 primeiras posições de cada venda (as do Precificador ficam aqui)
+const pkmCurta = v => (v.length > 15 ? v.slice(0, 15) : v);
 function pkmEnviar(foco) {
   if (!pkmWin || pkmWin.isDestroyed()) return;
   const p = pkmLer(), o = pkmOpcoes();
   pkmWin.webContents.send('pkstate', {
-    especies: p.especies, vendas: p.vendas, contas: p.contas, buracos: p.buracos, gradeAtual: p.gradeAtual, gradeDia: p.gradeDia,
+    especies: p.especies, vendas: p.vendas.map(pkmCurta), contas: p.contas, buracos: p.buracos, gradeAtual: p.gradeAtual, gradeDia: p.gradeDia,
     ofertas: p.ofertas, atacantes: p.atacantes ?? null, alertas: p.alertas, opcoes: o, ocupado: pkmOcupado, ult: pkmUlt, foco: foco ?? null,
     aviso: pkmAviso, jogo: { em: jogoLer()?.em ?? 0, montando: jogoMontando }
   });
@@ -2073,6 +2216,305 @@ function pkmSalvarOpcoes(novo) {
   pkmEnviar();
 }
 
+// 💲 NA FICHA DO JOGO (07/11/2026, pedido do usuário): ao lado do "Copiar p/ ChatGPT" de qualquer ficha (a sua, a de um
+// anúncio, a do ranking), um "💲 Precificar". Ele aperta o botão do próprio jogo, que copia a ficha em texto, e avisa o
+// app pelo console; o app lê a área de transferência e abre o Precificador com a ficha colada. O Z-Move e o AoE não vêm
+// no texto: saem dos selos da ficha (o cristal /img/itens/zmove/<tipo>.png e o selo .tm-selo.aoe).
+const FICHA_PRECO_SCRIPT = `(() => {
+  if (window.__pkmFichaPreco) return;
+  window.__pkmFichaPreco = true;
+  let espera = null;
+  const pegar = texto => {
+    if (!espera || typeof texto !== 'string') return;
+    const p = espera;
+    espera = null;
+    console.debug('__pkmPrecoFicha:' + JSON.stringify({ ...p, texto }));
+  };
+  try {
+    const cb = navigator.clipboard, orig = cb.writeText.bind(cb);
+    cb.writeText = t => { pegar(t); return orig(t); };
+  } catch (e) {}
+  document.addEventListener('copy', () => { const el = document.activeElement; if (el && el.tagName === 'TEXTAREA') pegar(el.value); }, true);
+  const por = () => {
+    const gpt = document.getElementById('fi-gpt');
+    if (!gpt || document.getElementById('pkm-preco')) return;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.id = 'pkm-preco';
+    b.className = gpt.className.replace('btn-apagado', '').replace(/ +/g, ' ').trim();
+    b.title = 'Mostra aqui o preço em gemas desta ficha: Vender rápido, Preço justo e Esperar (copia a ficha, como o botão ao lado)';
+    b.innerHTML = '<span>💲 Precificar</span>';
+    b.onclick = ev => {
+      ev.stopPropagation();
+      const caixa = gpt.closest('[role="dialog"], .dlg, .modal, .fi-ficha, .ficha') || document;
+      const img = caixa.querySelector('.tm-selo img[src*="/zmove/"]');
+      const z = img ? ((img.getAttribute('src') || '').split('/zmove/')[1] || '').split('.')[0] || 'sim' : '';
+      const aoe = !!caixa.querySelector('.tm-selo.aoe');
+      caixaRes('<div style="opacity:.8">Calculando o preço…</div>');
+      // O texto é pego na hora em que o jogo copia (a leitura da área de transferência pelo app falhava no jogo de verdade)
+      const pedido = { z: z.toUpperCase(), aoe };
+      espera = pedido;
+      gpt.click();
+      setTimeout(() => { if (espera === pedido) { espera = null; console.debug('__pkmPrecoFicha:' + JSON.stringify(pedido)); } }, 2500);
+    };
+    gpt.after(b);
+  };
+  // A caixa do resultado, logo abaixo dos botões, ocupando a linha inteira
+  const caixaRes = html => {
+    const b = document.getElementById('pkm-preco');
+    if (!b) return null;
+    let box = document.getElementById('pkm-preco-res');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'pkm-preco-res';
+      box.style.cssText = 'flex-basis:100%;grid-column:1/-1;width:100%;box-sizing:border-box;margin:6px 0;padding:10px 12px;border-radius:10px;' +
+        'background:rgba(30,18,40,.92);border:2px solid #b07ad8;color:#f3e9ff;font-size:13px;line-height:1.35;text-align:left';
+      b.after(box);
+    }
+    box.innerHTML = html;
+    const det = box.querySelector('[data-pkm-det]');
+    if (det) det.onclick = e => { e.stopPropagation(); console.debug('__pkmPrecoDetalhe:1'); };
+    return box;
+  };
+  const fmt = n => Math.round(n).toLocaleString('pt-BR');
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  window.__pkmPrecoMostrar = r => {
+    const det = '<span data-pkm-det style="cursor:pointer;text-decoration:underline;color:#d9b8ff;white-space:nowrap">Ver detalhes ›</span>';
+    let h = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><b style="font-size:14px">💲 Preço em gemas</b>' +
+      (r.conf != null ? '<span style="opacity:.85">· Confiança ' + r.conf + '%</span>' : '') + '<span style="flex:1"></span>' + det + '</div>';
+    if (r.erro) { caixaRes(h + '<div>' + esc(r.erro) + '</div>'); return; }
+    if (r.sem) h += '<div>Ainda não há vendas suficientes para comparar este pokémon.</div>';
+    else {
+      const col = (rot, v, destaque) => '<div style="flex:1;text-align:center;padding:6px 4px;border-radius:8px;' +
+        (destaque ? 'background:rgba(255,215,90,.16);border:1px solid #ffd75a' : 'background:rgba(255,255,255,.06)') + '">' +
+        '<div style="font-size:11px;opacity:.85">' + rot + '</div><div style="font-size:' + (destaque ? 19 : 16) + 'px;font-weight:800;color:' + (destaque ? '#ffd75a' : '#fff') + '">' + fmt(v) + '</div></div>';
+      h += '<div style="display:flex;gap:6px">' + col('Vender rápido', r.low) + col('Preço justo', r.median, true) + col('Esperar', r.high) + '</div>';
+    }
+    const notas = [];
+    if (r.adicionais) notas.push('Inclui ' + esc(r.adicionais) + '.');
+    if (r.refino) notas.push('Não conta o refino.');
+    if (r.fora) notas.push('O Mercado só aceita anúncio com Nv 50 e Nota 3,5 para cima: é só uma referência.');
+    if (notas.length) h += '<div style="margin-top:6px;font-size:12px;opacity:.85">' + notas.join(' ') + '</div>';
+    caixaRes(h);
+  };
+  setInterval(por, 700);
+})();`;
+// A leitura do texto do "Copiar p/ ChatGPT" (a mesma do lerFicha de precificar.html)
+function prLerFicha(texto) {
+  const linhas = String(texto || '').split(/\r?\n/);
+  const campo = nome => { const re = new RegExp('^\\s*[-*]?\\s*(?:' + nome + ')\\s*:\\s*(.+)$', 'i'); for (const l of linhas) { const m = l.match(re); if (m) return m[1].trim(); } return null; };
+  const inteiro = s => { const m = String(s ?? '').match(/\d[\d.,]*/); return m ? Number(m[0].replace(/[.,]/g, '')) : null; };
+  const decimal = s => { const m = String(s ?? '').match(/\d+(?:[.,]\d+)?/); return m ? Number(m[0].replace(',', '.')) : null; };
+  const esp = campo('esp[ée]cie|species');
+  const idTxt = esp?.match(/\(#(\d+)\)/)?.[1];
+  const nome = esp ? esp.replace(/\s*\(#\d+\).*$/, '').replace(/\s+[—–-]\s+[A-Z /]+$/, '').replace(/✨/g, '').trim() : null;
+  const ST = { HP: 'hp', ATK: 'atk', DEF: 'def', SPATK: 'spAtk', SPDEF: 'spDef', SPD: 'speed', SPEED: 'speed', SPE: 'speed' };
+  const ivs = {};
+  let cols = null, refino = false;
+  for (const l of linhas) {
+    if (!l.trim().startsWith('|')) continue;
+    const row = l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+    if (/^stat$/i.test(row[0])) { cols = { base: row.findIndex(c => /^(?:species )?base/i.test(c)), iv: row.findIndex(c => /^iv\b/i.test(c)), refino: row.findIndex(c => /refino|refine/i.test(c)) }; continue; }
+    const k = ST[row[0].toUpperCase().replace(/[^A-Z]/g, '')];
+    if (!cols || !k || cols.iv < 0) continue;
+    const iv = inteiro(row[cols.iv]);
+    if (Number.isInteger(iv)) ivs[k] = iv;
+    const rf = cols.refino >= 0 ? inteiro(row[cols.refino]) : inteiro(String(row[cols.base] ?? '').match(/\+\s*([\d.,]+)/)?.[1]);
+    if (rf > 0) refino = true;
+  }
+  const especies = jogoLer()?.especies;
+  let speciesId = idTxt ? Number(idTxt) : null;
+  if ((!speciesId || especies?.[speciesId]?.n?.toLowerCase() !== nome?.toLowerCase()) && nome && especies) {
+    const alvo = nome.toLowerCase();
+    speciesId = Number(Object.keys(especies).find(id => especies[id].n.toLowerCase() === alvo)) || (especies[speciesId] ? speciesId : null);
+  }
+  return { speciesId, nome, level: inteiro(campo('n[íi]vel|level')), potencia: inteiro(campo('pot[êe]ncia|potency')), quality: decimal(campo('qualidade|quality')),
+    nota: decimal(campo('nota(?: da calculadora)?|calculator score')), shiny: /^(sim|yes|true)\b/i.test(campo('shiny') || ''), ivs, refino };
+}
+// Atualizado em 07/11/2026 (pedido do usuário): o preço aparece na própria ficha do jogo; a janela só abre no "Ver detalhes"
+async function prFichaDoJogo(i, json) {
+  if (!cfg.pokemonsUsado) { cfg.pokemonsUsado = true; saveCfg(); }
+  let f = {};
+  try { f = JSON.parse(json); } catch {}
+  const wc = views[i]?.webContents;
+  const mostrar = r => { if (wc && !wc.isDestroyed()) wc.executeJavaScript(`window.__pkmPrecoMostrar && window.__pkmPrecoMostrar(${JSON.stringify(r)})`).catch(() => {}); };
+  const texto = typeof f.texto === 'string' && f.texto ? f.texto : clipboard.readText();
+  if (!/esp[ée]cie|species|especie/i.test(texto)) {
+    appLog(`precificador: a ficha da ${cfg.names[i]} não chegou (${f.texto ? 'texto do jogo' : 'área de transferência'}: ${JSON.stringify(String(texto).slice(0, 80))})`);
+    return mostrar({ erro: 'A ficha não chegou ao app. Tente de novo.' });
+  }
+  prFichaUltima[i] = { texto, z: f.z || '', aoe: !!f.aoe, conta: cfg.names[i] };
+  const especies = jogoLer()?.especies;
+  if (!especies) { if (!jogoMontando) jogoMontar(); return mostrar({ erro: 'O app ainda está montando os dados do jogo. Tente de novo em alguns segundos.' }); }
+  const fi = prLerFicha(texto), falta = [];
+  if (!fi.speciesId || !especies[fi.speciesId]) falta.push('a espécie');
+  if (!(fi.level > 0)) falta.push('o nível');
+  if (!(fi.potencia >= 1)) falta.push('a potência');
+  if (!(fi.quality > 0)) falta.push('a qualidade');
+  if (PR.STATS.some(k => !Number.isInteger(fi.ivs[k]))) falta.push('os 6 IVs');
+  if (falta.length) return mostrar({ erro: `Não achei ${falta.join(', ')} na ficha.` });
+  const r = prPrecificar({ speciesId: fi.speciesId, level: fi.level, potencia: fi.potencia, quality: fi.quality, shiny: fi.shiny, ivs: fi.ivs,
+    tmElemental: f.z ? true : null, tmAoe: !!f.aoe, nota: fi.nota });
+  if (r.erro) return mostrar({ erro: r.erro });
+  const out = { conf: r.confidence?.percent ?? null, refino: fi.refino, fora: fi.level < 50 || r.nota == null || r.nota < 3.5 - 1e-9,
+    adicionais: (r.parts || []).map(p => p.label).join(', ').replace(/, ([^,]*)$/, ' e $1') };
+  if (r.available) Object.assign(out, { low: r.low, median: r.median, high: r.high }); else out.sem = true;
+  mostrar(out);
+  appLog(`precificador: ficha na ${cfg.names[i]}: ${r.name} Nv ${fi.level} → ${r.available ? `${r.low}/${r.median}/${r.high} gemas` : 'sem vendas'}`);
+}
+// "Ver detalhes" na ficha: abre a janela com a última ficha daquela conta
+function prFichaDetalhe(i) {
+  const d = prFichaUltima[i];
+  if (!d) return abrirPrecificador();
+  if (prWin && !prWin.isDestroyed()) prWin.webContents.send('prficha', d); else prFichaPendente = d;
+  abrirPrecificador();
+}
+let prFichaPendente = null;
+const prFichaUltima = {};
+
+// ---------- 💲 Precificador: quanto pedir, em gemas, por um pokémon ----------
+// Pedido do usuário em 06/11/2026, depois de ver o "Precificador de Pokémon" de briaoAle (site de um jogador). O
+// cálculo mora em precificador.js: o do site, licença MIT, refeito com os dados do app. Aqui fica o contexto (as
+// vendas em gemas dos últimos 30 dias do Monitor, o preço dos fragmentos do Monitor de Preços, o catálogo do jogo e a
+// curva do mercado, refeitos quando chega coisa nova), a calibração (o teste com as vendas recentes: correção, pesos
+// da confiança e os números de acerto; refeita a cada 12 h, aos poucos, para não travar o app), os pokémon das 4
+// contas (lidos do estado de cada uma, ver __pkmMeusPokemons) e a janela precificar.html.
+const prCalibPath = () => path.join(app.getPath('userData'), 'precificador.json');
+const PR_CALIB_MS = 12 * 3600e3;
+let prWin = null, prCtxCache = null, prCalib, prCalibrando = false, prCalibProg = '';
+function prCalibLer() {
+  if (prCalib === undefined) { try { prCalib = JSON.parse(fs.readFileSync(prCalibPath(), 'utf8')); } catch { prCalib = null; } }
+  return prCalib;
+}
+function prCtx() {
+  const d = jogoLer();
+  if (!d?.especies) return { erro: 'O app ainda está montando os dados do jogo (leva uns segundos depois de abrir).' };
+  const p = pkmLer(), regs = precosLer().registros || [];
+  const chave = `${d.em}|${p.vendas.length}|${p.vendas.at(-1)?.[0]}|${p.completar?.linhas ?? 0}|${regs.length}|${regs.at(-1)?.em}`;
+  if (prCtxCache?.chave === chave && Date.now() - prCtxCache.em < 30 * 60000) return prCtxCache;
+  const t0 = Date.now();
+  const cat = PR.catalogo(d.especies), itemPrices = PR.cotacoesDosRegistros(regs);
+  const { rows, pulou } = PR.linhas(p.vendas, cat, itemPrices);
+  const fits = [false, true].map(sh => { const same = rows.filter(r => r.shiny === sh); return same.length >= 3 ? PR.marketFit(same) : null; });
+  prCtxCache = { chave, em: Date.now(), cat, itemPrices, rows, pulou, fits, ms: Date.now() - t0 };
+  return prCtxCache;
+}
+const prOpcoes = () => { cfg.precificador ??= {}; cfg.precificador.unidades ??= {}; return cfg.precificador; };
+
+// alvo: { speciesId, level, potencia, quality, shiny, ivs: {hp…} ou 6 letras, tmElemental, tmAoe, nota? }
+function prPrecificar(alvo, leve = false) {
+  const c = prCtx();
+  if (c.erro) return { erro: c.erro };
+  if (!c.rows.length) return { erro: 'Ainda não há vendas em gemas guardadas. O app começa a ler as vendas do Mercado (pela Conta 1) alguns minutos depois que você abre o Precificador ou o Monitor de Pokémons.' };
+  const cal = prCalibLer();
+  try {
+    const ivs = typeof alvo?.ivs === 'string' ? PR.ivsDeTexto(alvo.ivs) : alvo?.ivs;
+    return PR.precificar({ ...alvo, ivs }, { cat: c.cat, rows: c.rows, itemPrices: c.itemPrices, unidades: prOpcoes().unidades, agora: Date.now(),
+      pesos: cal?.pronto ? cal.pesos : undefined, bias: cal?.pronto ? cal.bias : undefined, fits: c.fits, leve });
+  } catch (e) {
+    return { erro: e.message };
+  }
+}
+// Vários de uma vez (a lista da conta): só os três preços e a confiança, cedendo a vez ao resto do app entre um e outro
+async function prPrecificarLote(alvos) {
+  const out = {};
+  for (const a of (Array.isArray(alvos) ? alvos : []).slice(0, 400)) {
+    const r = prPrecificar(a, true);
+    out[a.chave] = r.erro ? { erro: r.erro } : r.available ? { low: r.low, median: r.median, high: r.high, conf: r.confidence?.percent ?? null } : { sem: true };
+    await new Promise(res => setImmediate(res));
+  }
+  return out;
+}
+// Os pokémon das 4 contas, com a Nota (a mesma conta do jogo) e se o Mercado aceita o anúncio (Nv 50 e nota 3,5)
+async function prContas() {
+  const c = prCtx();
+  const out = [];
+  for (let i = 0; i < TOTAL; i++) {
+    const wc = views[i]?.webContents;
+    let lista = null, erro = '';
+    try { lista = wc && !wc.isDestroyed() ? await wc.executeJavaScript('window.__pkmMeusPokemons ? window.__pkmMeusPokemons() : null') : null; } catch (e) { erro = e.message; }
+    if (Array.isArray(lista) && !c.erro) {
+      for (const p of lista) {
+        const ivs = PR.ivsDeTexto(p.ivs);
+        p.nota = ivs && p.pot >= 1 ? c.cat.nota(p.sp, { ivs, quality: Number(p.q), potencia: Number(p.pot), shiny: !!p.sh }) : null;
+        p.ivt = ivs ? PR.STATS.reduce((s, k) => s + ivs[k], 0) : null;
+      }
+    }
+    out.push({ conta: i, nome: cfg.names[i], lista: Array.isArray(lista) ? lista : null,
+      erro: Array.isArray(lista) ? '' : erro || (wc ? 'a conta ainda não entrou no jogo' : 'conta fechada') });
+  }
+  if (!prContasLogou) {
+    prContasLogou = true;
+    appLog(`precificador: pokémon das contas: ${out.map(c => `${c.nome} ${c.lista ? `${c.lista.length} (${c.lista.filter(p => p.ivs).length} com IVs)` : `– (${c.erro})`}`).join(', ')}`);
+  }
+  return out;
+}
+let prContasLogou = false;
+
+// A calibração: o teste do precificador com as nossas vendas (cada venda dos últimos 7 dias precificada só com as de
+// antes dela). Dá a correção (o desvio médio), os pesos da confiança e os números da tela. Roda aos poucos.
+async function prCalibrar(forcar = false) {
+  if (prCalibrando) return;
+  const cal = prCalibLer();
+  if (!forcar && cal?.em && Date.now() - cal.em < PR_CALIB_MS) return;
+  const c = prCtx();
+  if (c.erro || c.rows.length < 500) return;
+  prCalibrando = true; prCalibProg = ''; prEnviar();
+  const t0 = Date.now();
+  try {
+    const megaUnit = PR.megaUnitDe(c.itemPrices);
+    const r = await PR.calibrar(c.rows, { cat: c.cat, megaUnit, agora: Date.now(), ceder: () => new Promise(res => setImmediate(res)),
+      progresso: (n, total) => { prCalibProg = `${n} de ${total}`; prEnviar(); } });
+    prCalib = { ...r, ms: Date.now() - t0 };
+    fs.writeFileSync(prCalibPath(), JSON.stringify(prCalib));
+    appLog(`precificador: calibrado com ${r.vendas} vendas em ${Math.round((Date.now() - t0) / 1000)} s` + (r.teste ? ` (a até 25%: ${Math.round(r.teste.ate25 * 100)}%, na faixa: ${Math.round(r.teste.dentroDaFaixa * 100)}%)` : ''));
+  } catch (e) {
+    appLog(`precificador: calibração falhou (${e.message})`);
+  } finally {
+    prCalibrando = false; prCalibProg = ''; prEnviar();
+  }
+}
+
+function prEnviar() {
+  if (!prWin || prWin.isDestroyed()) return;
+  const c = prCtx(), cal = prCalibLer(), p = pkmLer();
+  const corte = Date.now() - 30 * 864e5;
+  const faltam = p.vendas.reduce((n, v) => n + (v[4] === 1 && v[1] >= corte && v[15] == null ? 1 : 0), 0);
+  prWin.webContents.send('prstate', {
+    erro: c.erro || '', vendas: c.rows?.length ?? 0, aprox: c.rows?.filter(r => r.aprox).length ?? 0, pulou: c.pulou ?? {},
+    primeira: c.rows?.length ? Math.min(...c.rows.map(r => r.at)) : null, ultima: c.rows?.length ? Math.max(...c.rows.map(r => r.at)) : null,
+    calib: cal, calibrando: prCalibrando, calibProg: prCalibProg, unidades: prOpcoes().unidades,
+    completar: { faltam, feitas: p.completar?.linhas ?? 0, rodando: pkmCompletando, desligado: 'edição de venda' }
+  });
+}
+function prJogoEnviar() {
+  if (!prWin || prWin.isDestroyed()) return;
+  const d = jogoLer();
+  let ico = null, spr = null;
+  try { if (d) ico = `data:image/png;base64,${fs.readFileSync(jogoIcoPath()).toString('base64')}`; } catch {}
+  try { if (d?.v === JOGO_VERSAO) spr = `data:image/png;base64,${fs.readFileSync(jogoSprPath()).toString('base64')}`; } catch {}
+  const especies = {};
+  for (const [id, e] of Object.entries(d?.especies ?? {})) especies[id] = { n: e.n, t: e.t, i: e.i, ...(e.e ? { e: e.e } : {}) };
+  prWin.webContents.send('prjogo', d ? { em: d.em, especies, icones: ico ? { ...d.icones, png: ico } : null, sprites: spr ? { ...d.sprites, png: spr } : null } : null);
+}
+function abrirPrecificador() {
+  if (!cfg.pokemonsUsado) { cfg.pokemonsUsado = true; saveCfg(); }
+  if (prWin && !prWin.isDestroyed()) { if (prWin.isMinimized()) prWin.restore(); return prWin.focus(); }
+  prWin = new BrowserWindow({
+    width: 1280, height: 860, parent: win, autoHideMenuBar: true, backgroundColor: '#151515',
+    title: 'Precificador de Pokémon',
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true }
+  });
+  prWin.on('page-title-updated', e => e.preventDefault());
+  prWin.loadFile(path.join(__dirname, 'precificar.html'));
+  prWin.webContents.on('did-finish-load', () => {
+    prJogoEnviar(); prEnviar(); setTimeout(() => prCalibrar(), 3000);
+    if (prFichaPendente) { prWin.webContents.send('prficha', prFichaPendente); prFichaPendente = null; }
+  });
+  prWin.on('closed', () => { prWin = null; });
+  if (!jogoLer()) jogoMontar();
+}
+
 // ---------- Economia (cotação gema ⇄ coin, rotas, ciclos, flips) ----------
 // Só lê o que os monitores já coletaram (precos.json e pokemons.json): nenhuma consulta a mais ao jogo.
 // As contas moram em economia.html; aqui só se manda os dados, e de novo a cada coleta.
@@ -2084,7 +2526,7 @@ function ecEnviar() {
   const dias = Object.keys(p.diario ?? {}).sort().slice(-8); // o diário dos itens: o porquê das stones ficarem fora
   ecWin.webContents.send('ecstate', {
     precos: { atual: p.atual ?? null, nomes: p.nomes, diario: Object.fromEntries(dias.map(d => [d, p.diario[d]])) },
-    pk: { vendas: k.vendas.filter(v => v[1] >= corte), especies: k.especies, gradeAtual: k.gradeAtual }
+    pk: { vendas: k.vendas.filter(v => v[1] >= corte).map(pkmCurta), especies: k.especies, gradeAtual: k.gradeAtual }
   });
 }
 function abrirEconomia() {
@@ -2771,8 +3213,10 @@ const TW_ESTADO_JS = `(() => {
   const v = document.querySelector('video');
   const p = document.querySelector('[data-test-selector="balance-string"]') || document.querySelector('.community-points-summary button');
   const aviso = document.querySelector('[data-a-target="content-classification-gate-overlay-start-watching-button"], [data-a-target="player-overlay-mature-accept"]');
-  return { tocando: !!v && !v.paused && v.readyState >= 2, altura: v?.videoHeight ?? 0, pontos: p?.textContent ?? null, aviso: !!aviso };
+  const codec = /codecs="?([a-z0-9]+)/i.exec((window.__pkmCodecs || []).filter(t => /^video/i.test(t)).at(-1) || '')?.[1] || '';
+  return { tocando: !!v && !v.paused && v.readyState >= 2, altura: v?.videoHeight ?? 0, pontos: p?.textContent ?? null, aviso: !!aviso, codec };
 })()`;
+// O formato do vídeo (AV1 e HEVC recusados, `__pkmCodecs`): ver twitch-preload.js
 async function twLivesEstado(i) {
   const out = {};
   for (const c of cfg.twitch.canais[i]) {
@@ -2951,7 +3395,7 @@ let twBauRodando = false, twBauVisto = Date.now(), twBauAnotou = false;
 const twBauEspera = new Map(); // "conta:login" -> não tenta antes disto: o clique não fez o baú sumir
 const twBauHoje = () => (cfg.twitch.bauDia?.dia === repHoje() ? cfg.twitch.bauDia.n : 0);
 async function twBauConferir() {
-  if (!cfg.twitch.bau || twBauRodando) return;
+  if (!cfg.twitch.bau || twBauRodando || cfg.twitch.pausado) return;
   twBauRodando = true;
   try {
     let comVideo = null;
@@ -3062,6 +3506,7 @@ const assinaturaLives = (tw, kk) => { const l = livesDoJogo(tw, kk); return `${[
 // instante não fecha tudo.
 let twListaUlt = '', twListaPend = '';
 async function twListaVigiar() {
+  if (cfg.twitch.pausado) return;
   const wc = views[TW_AUTO_CONTA]?.webContents;
   if (!wc || wc.isDestroyed() || twAutoRodando) return;
   const d = await wc.executeJavaScript('({ tw: window.__pkmTwitch?.tw ?? null, kk: window.__pkmKick?.kk ?? null })').catch(() => null);
@@ -3076,7 +3521,7 @@ async function twListaVigiar() {
 // Uma conferência por vez: a agendada, a do botão 🔄 e a da lista que mudou podem coincidir
 let twAutoRodando = false;
 async function twAutoVerificar() {
-  if (twAutoRodando) return;
+  if (twAutoRodando || cfg.twitch.pausado) return;
   twAutoRodando = true;
   try { await twAutoConferir(); } finally { twAutoRodando = false; }
 }
@@ -3167,7 +3612,7 @@ async function twAutoConferir() {
   setTimeout(async () => { if (!win?.isDestroyed()) twBaixarQualidade(i, await twLivesEstado(i)); }, VEND_TESTE ? 800 : 60000);
   // Se o vídeo das que ficaram está mesmo rodando (é o que dá os pontos)
   const videoTxt = Object.entries(estadosTw).filter(([l]) => cfg.twitch.canais[i].some(c => c.plat === 'twitch' && c.login === l))
-    .map(([l, e]) => `${l} ${e.aviso ? 'pede confirmação na página (clique nela no painel)' : e.tocando ? `tocando ${e.altura}p` : 'parada'}`).join(', ');
+    .map(([l, e]) => `${l} ${e.aviso ? 'pede confirmação na página (clique nela no painel)' : e.tocando ? `tocando ${e.altura}p${e.codec ? ` ${e.codec}` : ''}` : 'parada'}`).join(', ');
   twAuto.noAr = alvo.length;
   twAuto.abertas = novas.map(canalId);
   twAuto.pontos = { ...Object.fromEntries(Object.entries(pontosKk).map(([s, n]) => [`kick:${s}`, n])), ...pontosTw };
@@ -3321,6 +3766,38 @@ function abrirJanelaVoto(i, url) {
   w.loadURL(url);
 }
 
+// ⏸ PAUSAR AS LIVES (06/11/2026, pedido do usuário depois de fechar as lives à mão às 15:35 e o app reabrir sozinho às
+// 15:46): fecha as páginas de todas as lives, nas 4 contas, e o app para de abrir, conferir, trocar e clicar no baú até
+// a pessoa retomar. A lista de canais fica guardada, e a pausa continua depois de fechar e abrir o app. Retomar recria
+// as páginas e confere na hora (as 2 + 2 com mais pontos). Abrir um canal pelo + do painel ou pelo jogo também retoma.
+function twPausar() {
+  if (cfg.twitch.pausado) return;
+  cfg.twitch.pausado = true;
+  cfg.twitch.ouvir = null;
+  for (const m of twViews) {
+    for (const v of m.values()) { win.contentView.removeChildView(v); if (!v.webContents.isDestroyed()) v.webContents.close(); }
+    m.clear();
+  }
+  saveCfg();
+  layout();
+  applyTwitchVisibility();
+  pushState();
+  twAutoLog('Lives PAUSADAS: fechei todas; o app não abre nenhuma até retomar');
+  appLog('lives pausadas');
+}
+function twRetomar(motivo = '') {
+  if (!cfg.twitch.pausado) return;
+  cfg.twitch.pausado = false;
+  saveCfg();
+  for (let i = 0; i < TOTAL; i++) for (const c of cfg.twitch.canais[i]) if (!twViews[i].has(canalId(c))) twCreate(i, c);
+  layout();
+  applyTwitchVisibility();
+  pushState();
+  twAutoLog(`Lives retomadas${motivo ? ` (${motivo})` : ''}`);
+  appLog('lives retomadas');
+  twAutoVerificar();
+}
+
 function twRemove(i, id) {
   const lista = cfg.twitch.canais[i];
   const at = lista.findIndex(c => canalId(c) === id);
@@ -3457,6 +3934,7 @@ async function pushTwitchState() {
     } : null,
     auto: conta === TW_AUTO_CONTA ? { ...twAuto, proxima: twAuto.proxima } : null,
     bau: { ligado: !!cfg.twitch.bau, hoje: twBauHoje() },
+    pausado: !!cfg.twitch.pausado,
     total: cfg.twitch.canais.reduce((s, l) => s + l.length, 0)
   });
 }
@@ -3630,7 +4108,7 @@ function createGameView(i) {
     aplicarMovimento(wc); // no Ultra leve; depois de uma queda do processo, prende o debugger de novo
     // A escuta vai nas 4 contas (a Reposição e a Melhor hunt usam em todas); o Sniper também (cada conta compra a
     // lista dela); o pedido-e-resposta dos monitores, só na Conta 1
-    wc.executeJavaScript(WS_ESCUTA + HUNT_ESCUTA).catch(() => {});
+    wc.executeJavaScript(WS_ESCUTA + HUNT_ESCUTA + FICHA_PRECO_SCRIPT).catch(() => {});
     wc.executeJavaScript((i === PRECO_CONTA ? PEDIR_SCRIPT : '') + SNIPER_SCRIPT).then(() => sniperEnviarConfig(i)).catch(() => {});
     if (i === TW_AUTO_CONTA) wc.executeJavaScript(TELA_PONTOS_SCRIPT).then(twTelaEnviar).catch(() => {});
   });
@@ -3639,6 +4117,8 @@ function createGameView(i) {
   wc.on('console-message', e => {
     if (e.message === '__pkmSnRepasse' && i === sniperOlheiro) sniperRepassar();
     else if (i === TW_AUTO_CONTA && e.message.startsWith('__pkmTelaPontos:')) twTelaAberta(e.message.slice(16)).catch(() => {});
+    else if (e.message.startsWith('__pkmPrecoFicha:')) prFichaDoJogo(i, e.message.slice(16));
+    else if (e.message.startsWith('__pkmPrecoDetalhe:')) prFichaDetalhe(i);
   });
 
   // No modo grade, clicar dentro de um quadro torna aquela conta a selecionada
@@ -3727,7 +4207,8 @@ function createWindow() {
   }
 
   active = Math.min(Math.max(cfg.active || 0, 0), TOTAL - 1);
-  for (let i = 0; i < TOTAL; i++) tw.canais[i].forEach(c => twCreate(i, c));
+  // Com as lives pausadas (⏸ no painel), as páginas só voltam ao retomar
+  if (!tw.pausado) for (let i = 0; i < TOTAL; i++) tw.canais[i].forEach(c => twCreate(i, c));
   applyVisibility();
 
   win.on('resize', layout);
@@ -3796,6 +4277,11 @@ function createWindow() {
   setInterval(precoTalvezColetar, 60000);
   // Monitor de Pokémons: começa 3,5 min depois de abrir (depois do de itens), e confere a cada minuto
   setTimeout(() => { pkmTalvezColetar(); setInterval(pkmTalvezColetar, 60000); }, 210000);
+  // As fichas das vendas de antes do 💲 Precificador (uma vez só; ver pkmCompletarFichas)
+  setTimeout(() => {
+    const ir = () => pkmCompletarFichas().catch(e => appLog(`pokémons: completar fichas: erro (${e.message})`));
+    ir(); setInterval(ir, 5 * 60000);
+  }, process.env.PKM_COMPLETAR_TESTE === '1' ? 3000 : 330000);
   // Vendidos por dia: começa 4,5 min depois de abrir (depois dos dois), e confere a cada minuto
   setTimeout(() => { vendTick(); setInterval(vendTick, VEND_TESTE ? 200 : 60000); }, VEND_TESTE ? 1500 : 270000);
   // Dados do jogo (golpes e ícones das espécies): 5 min depois de abrir, se os guardados tiverem mais de 3 dias
@@ -3851,11 +4337,32 @@ ipcMain.on('toggle', (_e, key) => {
 });
 ipcMain.on('gridZoom', (_e, delta) => changeGridZoom(Number(delta) || 0));
 ipcMain.on('tw:toggle', () => toggleTwitch());
+ipcMain.on('tw:pausa', () => (cfg.twitch.pausado ? twRetomar('pelo botão') : twPausar()));
+ipcMain.on('fpsVista', () => {
+  cfg.fpsVista = (cfg.fpsVista ?? 30) ? 0 : 30;
+  saveCfg();
+  applyVisibility(false);
+  appLog(`conta à vista: ${cfg.fpsVista ? cfg.fpsVista + ' quadros/s' : 'sem limite de quadros'}`);
+  pushState();
+});
 ipcMain.on('sn:abrir', () => abrirSniper());
 ipcMain.on('pc:abrir', () => abrirPrecos());
 ipcMain.on('pc:agora', async () => { await precoColetar('pedido na janela'); precosEnviar(); vendUlt = 0; vendTick(); });
 ipcMain.on('pc:opcoes', (_e, novo) => precoSalvarOpcoes(novo));
 ipcMain.on('pk:abrir', () => abrirPokemons());
+ipcMain.on('pr:abrir', () => abrirPrecificador());
+ipcMain.handle('pr:precificar', (_e, alvo) => prPrecificar(alvo));
+ipcMain.handle('pr:lote', (_e, alvos) => prPrecificarLote(alvos));
+ipcMain.handle('pr:contas', () => prContas());
+ipcMain.on('pr:calibrar', () => prCalibrar(true));
+// O preço por unidade de um fragmento (Z-Move, AoE, Mega), escolhido na janela; vazio volta à cotação do dia
+ipcMain.on('pr:unidades', (_e, id, valor) => {
+  const u = prOpcoes().unidades, v = Number(valor);
+  if (![59194, 40530, 70014, 70015].includes(Number(id))) return;
+  if (v > 0 && v < 1e9) u[id] = v; else delete u[id];
+  saveCfg();
+  prEnviar();
+});
 ipcMain.on('ec:abrir', () => { if (!cfg.pokemonsUsado) { cfg.pokemonsUsado = true; saveCfg(); } abrirEconomia(); });
 ipcMain.on('pd:abrir', () => abrirPokedex());
 ipcMain.on('rep:abrir', () => abrirReposicao());
@@ -3971,6 +4478,24 @@ ipcMain.on('cycleFps', () => {
   cfg.gridFps = FPS_STEPS[(at + 1) % FPS_STEPS.length];
   saveCfg();
   applyVisibility(false);
+});
+// Botão direito numa aba (07/11/2026, pedido do usuário: o duplo clique para renomear não funcionava)
+ipcMain.on('tabMenu', (_e, i) => {
+  if (!Number.isInteger(i) || i < 0 || i >= TOTAL) return;
+  const nome = cfg.names[i];
+  Menu.buildFromTemplate([
+    { label: `${nome}  ·  Ctrl+${i + 1}`, enabled: false },
+    { type: 'separator' },
+    { label: 'Renomear…', click: () => { bar?.webContents.focus(); bar?.webContents.send('renomear', i); } },
+    { label: 'Recarregar esta conta', click: () => views[i]?.webContents.reload() },
+    { label: 'Importar login do navegador…', click: () => importarLogin(i) },
+    { type: 'separator' },
+    { label: 'Sair da conta (apaga o login salvo)…', click: async () => {
+      const r = await dialog.showMessageBox(win, { type: 'warning', buttons: ['Sair da conta', 'Cancelar'], defaultId: 1, cancelId: 1,
+        title: 'Sair da conta', message: `Sair da "${nome}"?`, detail: 'Isso apaga o login salvo só desta aba.' });
+      if (r.response === 0) ipcMain.emit('clearSession', {}, i);
+    } }
+  ]).popup({ window: win });
 });
 ipcMain.on('clearSession', async (_e, i) => {
   await session.fromPartition(`persist:conta${i + 1}`).clearStorageData();
