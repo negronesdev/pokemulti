@@ -964,6 +964,7 @@ async function sniperLer() {
 }
 
 function abrirSniper() {
+  if (!licenca.premium()) return licenca.pedirPremium('O 🎯 Sniper');
   if (sniperWin && !sniperWin.isDestroyed()) { if (sniperWin.isMinimized()) sniperWin.restore(); return sniperWin.focus(); }
   sniperWin = new BrowserWindow({
     width: 760, height: 940, parent: win, autoHideMenuBar: true, backgroundColor: '#151515',
@@ -1186,6 +1187,7 @@ function repEnviar() {
 }
 
 function abrirReposicao() {
+  if (!licenca.premium()) return licenca.pedirPremium('A 🛒 Reposição');
   if (repWin && !repWin.isDestroyed()) { if (repWin.isMinimized()) repWin.restore(); return repWin.focus(); }
   repWin = new BrowserWindow({
     width: 860, height: 900, parent: win, autoHideMenuBar: true, backgroundColor: '#151515',
@@ -1428,6 +1430,7 @@ function precosEnviar(foco) {
 }
 
 function abrirPrecos(foco) {
+  if (!licenca.premium()) return licenca.pedirPremium('O 📈 Monitor de Preços');
   if (precosWin && !precosWin.isDestroyed()) {
     if (precosWin.isMinimized()) precosWin.restore();
     precosWin.focus();
@@ -2187,6 +2190,7 @@ function pkmEnviar(foco) {
 }
 
 function abrirPokemons(foco) {
+  if (!licenca.premium()) return licenca.pedirPremium('O 🐉 Monitor de Pokémons');
   if (!cfg.pokemonsUsado) { cfg.pokemonsUsado = true; saveCfg(); }
   if (pkmWin && !pkmWin.isDestroyed()) {
     if (pkmWin.isMinimized()) pkmWin.restore();
@@ -2498,6 +2502,7 @@ function prJogoEnviar() {
   prWin.webContents.send('prjogo', d ? { em: d.em, especies, icones: ico ? { ...d.icones, png: ico } : null, sprites: spr ? { ...d.sprites, png: spr } : null } : null);
 }
 function abrirPrecificador() {
+  if (!licenca.premium()) return licenca.pedirPremium('O 💲 Precificador');
   if (!cfg.pokemonsUsado) { cfg.pokemonsUsado = true; saveCfg(); }
   if (prWin && !prWin.isDestroyed()) { if (prWin.isMinimized()) prWin.restore(); return prWin.focus(); }
   prWin = new BrowserWindow({
@@ -2530,6 +2535,7 @@ function ecEnviar() {
   });
 }
 function abrirEconomia() {
+  if (!licenca.premium()) return licenca.pedirPremium('A 💰 Economia');
   if (ecWin && !ecWin.isDestroyed()) { if (ecWin.isMinimized()) ecWin.restore(); return ecWin.focus(); }
   ecWin = new BrowserWindow({
     width: 1200, height: 820, parent: win, autoHideMenuBar: true, backgroundColor: '#151515',
@@ -2558,6 +2564,7 @@ function pdEnviar() {
   pdWin.webContents.send('pdjogo', png ? { em: d.em, especies, sprites: { ...d.sprites, png } } : { montando: jogoMontando, erro: jogoErro }, { cores: !!cfg.pokedex?.cores });
 }
 function abrirPokedex() {
+  if (!licenca.premium()) return licenca.pedirPremium('A 🔍 Pokédex');
   if (pdWin && !pdWin.isDestroyed()) { if (pdWin.isMinimized()) pdWin.restore(); return pdWin.focus(); }
   // Onde ficou da última vez (se ainda cabe numa tela); na primeira, encostada à direita da janela do app
   const b = cfg.pokedex?.bounds, wb = win.getBounds();
@@ -2703,6 +2710,7 @@ function huRitmoEnviar() {
   huWin.webContents.send('huritmo', { site: s?.t ?? null, siteEm: s?.em ?? 0, baixando: ritmoBaixando, erro: ritmoErro, corridas: ritmoMedLer().corridas });
 }
 function abrirHunts() {
+  if (!licenca.premium()) return licenca.pedirPremium('A 🗺 Melhor hunt');
   if (huWin && !huWin.isDestroyed()) { if (huWin.isMinimized()) huWin.restore(); return huWin.focus(); }
   huWin = new BrowserWindow({
     width: 1180, height: 900, parent: win, autoHideMenuBar: true, backgroundColor: '#151515',
@@ -3176,6 +3184,7 @@ function caixaVisto() {
   pushState();
 }
 function abrirCaixa() {
+  if (!licenca.premium()) return licenca.pedirPremium('O 🏦 Caixa do projeto');
   if (caixaWin && !caixaWin.isDestroyed()) { if (caixaWin.isMinimized()) caixaWin.restore(); caixaWin.focus(); return caixaVisto(); }
   caixaWin = new BrowserWindow({
     width: 1040, height: 920, parent: win, autoHideMenuBar: true, backgroundColor: '#151515',
@@ -3976,6 +3985,7 @@ function twAbrirLogin(i, plat = 'twitch') {
 }
 
 function toggleTwitch() {
+  if (!licenca.premium()) return licenca.pedirPremium('O 📺 painel de lives');
   cfg.twitch.open = !cfg.twitch.open;
   saveCfg();
   layout();
@@ -4108,6 +4118,7 @@ function createGameView(i) {
     aplicarMovimento(wc); // no Ultra leve; depois de uma queda do processo, prende o debugger de novo
     // A escuta vai nas 4 contas (a Reposição e a Melhor hunt usam em todas); o Sniper também (cada conta compra a
     // lista dela); o pedido-e-resposta dos monitores, só na Conta 1
+    if (!licenca.premium()) return; // plano grátis: só o jogo, sem nenhum script nosso
     wc.executeJavaScript(WS_ESCUTA + HUNT_ESCUTA + FICHA_PRECO_SCRIPT).catch(() => {});
     wc.executeJavaScript((i === PRECO_CONTA ? PEDIR_SCRIPT : '') + SNIPER_SCRIPT).then(() => sniperEnviarConfig(i)).catch(() => {});
     if (i === TW_AUTO_CONTA) wc.executeJavaScript(TELA_PONTOS_SCRIPT).then(twTelaEnviar).catch(() => {});
@@ -4208,7 +4219,8 @@ function createWindow() {
 
   active = Math.min(Math.max(cfg.active || 0, 0), TOTAL - 1);
   // Com as lives pausadas (⏸ no painel), as páginas só voltam ao retomar
-  if (!tw.pausado) for (let i = 0; i < TOTAL; i++) tw.canais[i].forEach(c => twCreate(i, c));
+  if (!licenca.premium()) tw.open = false; // plano grátis: sem lives
+  else if (!tw.pausado) for (let i = 0; i < TOTAL; i++) tw.canais[i].forEach(c => twCreate(i, c));
   applyVisibility();
 
   win.on('resize', layout);
@@ -4272,6 +4284,7 @@ function createWindow() {
   setTimeout(memLog, 60000);
   setInterval(memLog, 5 * 60000);
 
+  if (!licenca.premium()) return; // plano grátis: nenhuma rotina dos recursos (monitores, Sniper, Reposição, Caixa, voto, lives)
   // Monitor de Preços: primeira conferência 2,5 min depois de abrir (o jogo já logou), depois a cada 10 min
   setTimeout(precoColetar, 150000);
   setInterval(precoTalvezColetar, 60000);
@@ -4347,6 +4360,57 @@ ipcMain.on('fpsVista', () => {
 });
 ipcMain.on('sn:abrir', () => abrirSniper());
 ipcMain.on('pc:abrir', () => abrirPrecos());
+// Vendas reais de um item (09/11/2026, pedido do usuário: "qual o valor máximo vendido nos últimos 3 dias" do AoE TM):
+// a Tabela de preços do jogo filtrada pelo item e pela moeda (Conta 1). Lê da mais nova para trás até passar do período
+// (o jogo para na 41ª página, ~1.230 vendas), e tenta também a ordem das mais caras para achar o máximo mesmo quando o
+// período não cabe nas 41 páginas. Uma página a cada 0,6 s, esperando as coletas automáticas.
+async function pcVendasReais(id, moeda, dias = 3) {
+  const corte = Date.now() - dias * 864e5, vistas = new Map();
+  let paginas = 0, maisVelha = Infinity, chegou = false, erro = '';
+  const ler = async (pg, ordem) => {
+    while (pkmOcupado) await espera(1500);
+    const msg = { t: 'market.historicoGlobal', tipo: 'item', itemId: Number(id), moeda, pagina: pg, seq: ++pkmSeq };
+    if (ordem) msg.ordem = ordem;
+    const r = await pkmPedir(msg, 'historicoGlobal');
+    paginas++;
+    await espera(600);
+    if (r?.erro) { erro = r.erro; return null; }
+    const linhas = r.linhas || [];
+    for (const l of linhas) {
+      if (l.em >= corte && Number(l.bruto) > 0) vistas.set(l.id ?? `${l.em}:${l.bruto}`, { em: l.em, qtd: vendQtd(l), un: Number(l.bruto) / vendQtd(l) });
+    }
+    return { linhas, temMais: !!r.temMais };
+  };
+  for (let pg = 0; pg < 41; pg++) {
+    const r = await ler(pg);
+    if (!r) break;
+    for (const l of r.linhas) maisVelha = Math.min(maisVelha, l.em);
+    // A 41ª página sempre vem com temMais falso (o jogo para ali): só é o fim de verdade antes dela ou com página incompleta
+    if (r.linhas.some(l => l.em < corte) || (!r.temMais && (pg < 40 || r.linhas.length < 30))) { chegou = true; break; }
+  }
+  // Não coube: as mais caras primeiro (se o jogo aceitar a ordem), até achar algumas do período
+  let porCaras = false;
+  if (!chegou && !erro) {
+    // A ordem pode ser pelo total do lote: o preço por unidade nunca passa do total, então quando o menor total da página
+    // já fica abaixo da maior unidade achada no período, nenhuma venda adiante pode ser mais cara
+    for (let pg = 0; pg < 15; pg++) {
+      const r = await ler(pg, 'caros');
+      if (!r) break;
+      const tot = r.linhas.map(l => Number(l.bruto));
+      if (pg === 0 && tot.some((v, k) => k && v > tot[k - 1])) break; // o jogo ignorou a ordem
+      porCaras = true;
+      const maiorUn = Math.max(0, ...[...vistas.values()].map(x => x.un));
+      if (!r.temMais || !tot.length || Math.min(...tot) < maiorUn) break;
+    }
+  }
+  const v = [...vistas.values()], uns = v.map(x => x.un).sort((a, b) => a - b), unid = v.reduce((s, x) => s + x.qtd, 0);
+  const top = [...v].sort((a, b) => b.un - a.un).slice(0, 5);
+  const res = { id, moeda, dias, n: v.length, unid, max: top[0] ?? null, top, min: uns[0] ?? null, mediana: uns.length ? uns[Math.floor((uns.length - 1) / 2)] : null,
+    chegou, desde: chegou ? corte : maisVelha, porCaras, paginas, erro };
+  appLog(`preços: vendas reais de ${precosLer().nomes?.[id] ?? id} em ${moeda === 'orb' ? 'gemas' : 'coins'}, ${dias} dias: ${v.length} vendas, maior ${res.max ? Math.round(res.max.un) : '–'} (${paginas} páginas${chegou ? '' : ', não coube'}${erro ? `, erro: ${erro}` : ''})`);
+  return res;
+}
+ipcMain.handle('pc:vendasReais', (_e, id, moeda, dias) => pcVendasReais(id, moeda === 'gold' ? 'gold' : 'orb', Math.min(30, Math.max(1, Number(dias) || 3))));
 ipcMain.on('pc:agora', async () => { await precoColetar('pedido na janela'); precosEnviar(); vendUlt = 0; vendTick(); });
 ipcMain.on('pc:opcoes', (_e, novo) => precoSalvarOpcoes(novo));
 ipcMain.on('pk:abrir', () => abrirPokemons());

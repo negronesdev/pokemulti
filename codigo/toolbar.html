@@ -50,6 +50,8 @@
   input { width:110px; font:inherit; background:#000; color:#fff; border:1px solid #555; border-radius:4px; padding:2px 4px; }
   .menu { position:fixed; }
   button.lic-aviso { border-color:#e3b341; color:#e3b341; }
+  /* Plano grátis: os recursos do Premium ficam apagados; o clique abre a tela do Premium */
+  body.gratis button.premium { opacity:.4; }
 </style>
 </head>
 <body>
@@ -125,7 +127,7 @@
     tw.dataset.dica ??= tw.title;
     tw.title = st.twitchPausado ? '⏸ Lives pausadas: nenhuma aberta. Abra o painel e clique em ▶ para retomar.\n\n' + tw.dataset.dica : tw.dataset.dica;
     const cx = document.getElementById('cx');
-    cx.className = st.caixa ? 'cx-' + st.caixa : '';
+    cx.className = (st.caixa ? 'cx-' + st.caixa : '') + (document.body.classList.contains('gratis') ? ' premium' : '');
     cx.dataset.dica ??= cx.title;
     cx.title = st.caixa ? '⚠ Tem aviso do caixa do projeto. Clique para ver.\n\n' + cx.dataset.dica : cx.dataset.dica;
     document.getElementById('zoomBox').style.display = st.grid ? 'flex' : 'none';
@@ -188,13 +190,18 @@
   document.getElementById('zVal').ondblclick = () => api.gridZoom(0);
   document.getElementById('rel').onclick = () => api.reload(st.active);
   document.getElementById('relAll').onclick = () => api.reloadAll();
-  // Quantos dias faltam do teste ou da licença; o clique abre a tela de pagamento e da key
+  // O plano: dias de Premium que faltam, Premium permanente, ou o grátis (só o jogo); o clique abre a tela do Premium
   api.onLic(l => {
     const b = document.getElementById('lic');
+    const gratis = l.modo === 'gratis', perm = !gratis && l.dias > 36500;
     b.style.display = '';
-    b.textContent = `⏳ ${l.dias} ${l.dias === 1 ? 'dia' : 'dias'}`;
-    b.title = (l.modo === 'teste' ? `Teste grátis até ${l.ateTxt}` : `Licença válida até ${l.ateTxt}`) + '. Clique para ver como pagar e colar a key.';
-    b.classList.toggle('lic-aviso', l.dias <= 5);
+    b.textContent = gratis ? '⭐ Seja Premium' : perm ? '⭐ Premium' : `⭐ ${l.dias} ${l.dias === 1 ? 'dia' : 'dias'}`;
+    b.title = gratis ? 'Plano grátis: o jogo nas 4 contas. O Premium liga as ferramentas (Sniper, monitores do Mercado, Precificador, lives e as outras). Clique para ver como assinar.'
+      : perm ? 'Premium permanente neste PC.'
+      : (l.modo === 'teste' ? `Premium grátis até ${l.ateTxt}` : `Premium até ${l.ateTxt}`) + '. Depois, o app continua grátis só com o jogo nas 4 contas. Clique para ver como renovar e colar a key.';
+    b.classList.toggle('lic-aviso', gratis || (!perm && l.dias <= 5));
+    document.body.classList.toggle('gratis', gratis);
+    for (const id of ['pd', 'rep', 'hu', 'cx', 'ec', 'pk', 'pr', 'pc', 'sn', 'tw']) document.getElementById(id).classList.toggle('premium', gratis);
     const n = document.getElementById('nova');
     n.style.display = l.nova ? '' : 'none';
     n.title = `Saiu a versão ${l.nova}. Clique para baixar o instalador. Seus logins e ajustes continuam guardados.`;

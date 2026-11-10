@@ -1,5 +1,6 @@
-// A trava da edição de venda: 7 dias de teste; depois o app só abre na tela de pagamento (bloqueio.html), até receber uma
-// key, que o vendedor envia à mão depois de conferir o Pix. Cada key vale para um PC e até uma data. Nada sai deste PC:
+// O plano da edição de venda (mudou em 10/11/2026): 7 dias de Premium grátis; depois o app continua abrindo, no plano
+// grátis, só com o jogo nas 4 contas (os recursos ficam desligados: ver `premium()` e os encaixes do gerar-venda.js), até
+// receber uma key, que o vendedor envia à mão depois de conferir o Pix. Cada key vale para um PC e até uma data. Nada sai deste PC:
 // o cliente é quem copia o código, e a hora vem do cabeçalho de um site público.
 // O limite é conhecido: o app é JavaScript, e quem souber programar consegue remover a trava. Quem apagar o arquivo E o
 // registro do Windows repete os 7 dias. Isso segura a maioria das pessoas, não um programador decidido.
@@ -26,7 +27,8 @@ const SEGREDO_ESTADO = 'pm-estado-v1'; // não é segredo de verdade: só impede
 const espera = ms => new Promise(r => setTimeout(r, ms));
 let appLog = () => {};
 let codigo = '', st = null, difRede = null;
-let janela = null, bloqueado = false, principal = null, barra = null;
+let janela = null, principal = null, barra = null;
+let premiumAoAbrir = false, recursoPedido = '';
 
 // ---- O código deste PC
 const REG_EXE = process.env.SystemRoot ? path.join(process.env.SystemRoot, 'System32', 'reg.exe') : 'reg';
@@ -69,7 +71,7 @@ async function carregar() {
   const abertos = brutos.map(abrirSelo).filter(Boolean);
   if (!abertos.length) {
     // Nada guardado é a primeira vez. Guardado e ilegível é arquivo mexido ou trazido de outro PC: sem novo teste.
-    st = { inicio: brutos.length ? 0 : null, visto: 0, key: '' };
+    st = { inicio: brutos.length ? 0 : null, visto: 0, key: '', oferta: 0 };
     if (brutos.length) appLog('licença: estado ilegível (mexido ou de outro PC); sem novo teste');
     return;
   }
@@ -77,7 +79,8 @@ async function carregar() {
   st = {
     inicio: Math.min(...abertos.map(o => o.inicio ?? 0)),
     visto: Math.max(...abertos.map(o => o.visto ?? 0)),
-    key: keys[0]?.key ?? ''
+    key: keys[0]?.key ?? '',
+    oferta: Math.max(...abertos.map(o => o.oferta ?? 0)) // o dia em que a tela do Premium abriu sozinha pela última vez
   };
 }
 function salvar() {
@@ -105,10 +108,10 @@ function estado() {
   const l = keyDestePc(st.key);
   const fimKey = l ? F.fimDoDia(l.ateDia) : 0, fimTeste = st.inicio ? st.inicio + TESTE_DIAS * DIA : 0;
   const dias = fim => Math.ceil((fim - t) / DIA);
-  if (fimKey > t && fimKey >= fimTeste) return { modo: 'licenca', livre: true, dias: dias(fimKey), ateTxt: F.dataDoDia(l.ateDia) };
-  if (fimTeste > t) return { modo: 'teste', livre: true, dias: dias(fimTeste), ateTxt: F.dataDoDia(F.diaDe(fimTeste)) };
-  if (l) return { modo: 'bloqueado', motivo: 'vencida', livre: false, ateTxt: F.dataDoDia(l.ateDia) };
-  return { modo: 'bloqueado', motivo: 'teste', livre: false, ateTxt: '' };
+  if (fimKey > t && fimKey >= fimTeste) return { modo: 'licenca', premium: true, dias: dias(fimKey), ateTxt: F.dataDoDia(l.ateDia) };
+  if (fimTeste > t) return { modo: 'teste', premium: true, dias: dias(fimTeste), ateTxt: F.dataDoDia(F.diaDe(fimTeste)) };
+  if (l) return { modo: 'gratis', motivo: 'vencida', premium: false, ateTxt: F.dataDoDia(l.ateDia) };
+  return { modo: 'gratis', motivo: 'teste', premium: false, ateTxt: '' };
 }
 
 // ---- O Pix: QR e copia e cola estáticos, com o valor, feitos aqui mesmo (padrão BR Code do Banco Central). O código
@@ -133,16 +136,15 @@ function pixCopiaCola() {
     tlv('62', tlv('05', codigo.replace(/-/g, ''))) + '6304';
   return corpo + crc16(corpo);
 }
-const mensagem = () => `Olá! Quero ${keyDestePc(st.key) ? 'renovar' : 'ativar'} o PokeMulti. Segue o comprovante do Pix.\nCódigo do PC: ${codigo}`;
+const mensagem = () => `Olá! Quero ${keyDestePc(st.key) ? 'renovar' : 'ativar'} o Premium do PokeMulti. Segue o comprovante do Pix.\nCódigo do PC: ${codigo}`;
 
-// ---- A janela de pagamento e da key: bloqueando (sozinha) ou só para renovar (por cima do app)
-function abrirJanela(trava) {
-  bloqueado = trava;
+// ---- A janela do Premium: pagamento e key, por cima do app (o app nunca fica bloqueado)
+function abrirJanela() {
   if (janela && !janela.isDestroyed()) { if (janela.isMinimized()) janela.restore(); janela.focus(); return; }
   janela = new BrowserWindow({
     width: 560, height: Math.min(880, screen.getPrimaryDisplay().workAreaSize.height), minWidth: 440, minHeight: 500,
     title: 'PokeMulti', backgroundColor: '#151515', autoHideMenuBar: true,
-    parent: trava ? undefined : principal ?? undefined,
+    parent: principal && !principal.isDestroyed() ? principal : undefined,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true }
   });
   janela.setMenu(null);
@@ -152,7 +154,9 @@ function abrirJanela(trava) {
 function enviarBarra() {
   if (!barra || barra.isDestroyed()) return;
   const e = estado();
-  if (e.livre) barra.send('licstate', { modo: e.modo, dias: e.dias, ateTxt: e.ateTxt, nova: novaVersao });
+  // A barra mostra o plano com que o app abriu: os recursos só mudam ao reabrir
+  const m = premiumAoAbrir ? e : { ...e, modo: 'gratis' };
+  barra.send('licstate', { modo: m.modo, dias: m.dias, ateTxt: m.ateTxt, nova: novaVersao });
 }
 // Versão nova: pergunta ao GitHub qual é a última e, se for maior que esta, a barra mostra um botão. Só avisa: quem baixa
 // e instala é o cliente. Não vai nenhum dado no pedido.
@@ -192,14 +196,14 @@ async function aplicar(txt) {
   salvar();
   appLog(`licença: key aplicada, vale até ${F.dataDoDia(k.ateDia)}`);
   enviarBarra();
-  const reabrindo = bloqueado;
+  // No plano grátis, os recursos só ligam reabrindo o app
+  const reabrindo = !premiumAoAbrir;
   if (reabrindo) setTimeout(reabrir, 1500);
-  else bloqueado = false;
   return { ok: true, ateTxt: F.dataDoDia(k.ateDia), reabrindo };
 }
 function registrarIpc() {
   ipcMain.handle('lic:dados', () => ({
-    ...estado(), bloqueado, testeDias: TESTE_DIAS, codigo, preco: preco(), periodo: CFG.periodo ?? 'por mês',
+    ...estado(), gratis: !premiumAoAbrir, recurso: recursoPedido, testeDias: TESTE_DIAS, codigo, preco: preco(), periodo: CFG.periodo ?? 'por mês',
     pix: pixCopiaCola(), whatsapp: !!CFG.whatsapp, instagram: CFG.instagram ?? ''
   }));
   ipcMain.handle('lic:aplicar', (_e, txt) => aplicar(txt));
@@ -215,18 +219,19 @@ function registrarIpc() {
     }
     if (qual === 'versao') shell.openExternal(`https://github.com/${REPO_PUBLICO}/releases/latest`);
   });
-  ipcMain.on('lic:abrir', () => abrirJanela(false));
+  ipcMain.on('lic:abrir', () => { recursoPedido = ''; abrirJanela(); });
 }
 
-// ---- Com o app aberto: venceu, reabre direto na tela de pagamento. Perto de vencer, avisa uma vez por dia.
+// ---- Com o app aberto: o Premium venceu, reabre no plano grátis (desligar cada recurso com o app aberto deixaria algum
+// pela metade). Perto de vencer, avisa uma vez por dia.
 let ultimoAviso = -1;
 function avisar(e) {
   const hoje = F.diaDe(agora());
   if (e.dias > AVISO_DIAS || ultimoAviso === hoje) return;
   ultimoAviso = hoje;
   if (!Notification.isSupported()) return;
-  const n = new Notification({ title: 'PokeMulti', body: `${e.modo === 'teste' ? 'Seu teste' : 'Sua licença'} termina em ${e.dias} ${e.dias === 1 ? 'dia' : 'dias'}. Clique para ver como renovar.` });
-  n.on('click', () => abrirJanela(false));
+  const n = new Notification({ title: 'PokeMulti', body: `${e.modo === 'teste' ? 'Seu Premium grátis' : 'Seu Premium'} termina em ${e.dias} ${e.dias === 1 ? 'dia' : 'dias'}. Depois, o app continua grátis só com o jogo nas 4 contas. Clique para ver como renovar.` });
+  n.on('click', () => { recursoPedido = ''; abrirJanela(); });
   n.show();
 }
 function vigiar() {
@@ -238,17 +243,18 @@ function vigiar() {
       salvar();
     }
     const e = estado();
-    if (!e.livre) {
-      appLog('licença: venceu com o app aberto; reabrindo na tela de pagamento');
+    if (premiumAoAbrir && !e.premium) {
+      appLog('licença: o Premium venceu com o app aberto; reabrindo no plano grátis');
       salvar();
+      if (Notification.isSupported()) new Notification({ title: 'PokeMulti', body: 'Seu Premium terminou. O app vai reabrir no plano grátis, com o jogo nas 4 contas.' }).show();
       return reabrir();
     }
     enviarBarra();
-    avisar(e);
+    if (e.premium) avisar(e);
   }, VIGIA_MS);
 }
 
-// Devolve se o app pode abrir. Se não puder, já deixa a tela de pagamento aberta.
+// Confere o plano. O app sempre abre: com o Premium, ou no plano grátis, só com o jogo nas 4 contas.
 async function iniciar({ log }) {
   appLog = log;
   registrarIpc();
@@ -263,15 +269,30 @@ async function iniciar({ log }) {
     if (janela && !janela.isDestroyed()) { if (janela.isMinimized()) janela.restore(); janela.focus(); }
   });
   const e = estado();
-  if (!e.livre) {
-    appLog(`licença: bloqueado (${e.motivo})`);
-    abrirJanela(true);
-    return false;
-  }
+  premiumAoAbrir = e.premium;
   vigiar();
-  setTimeout(() => avisar(estado()), 60000);
+  if (e.premium) setTimeout(() => avisar(estado()), 60000);
+  else {
+    appLog(`licença: plano grátis (${e.motivo === 'vencida' ? 'a key venceu' : 'o Premium grátis terminou'}); recursos desligados`);
+    // A tela do Premium abre sozinha uma vez por dia, por cima do jogo, e fecha no X
+    const hoje = F.diaDe(agora());
+    if (st.oferta !== hoje) {
+      st.oferta = hoje;
+      salvar();
+      setTimeout(() => { recursoPedido = ''; abrirJanela(); }, 4000);
+    }
+  }
   setTimeout(() => { conferirVersao(); setInterval(conferirVersao, VERSAO_DE_NOVO_MS); }, VERSAO_ESPERA_MS);
   return true;
+}
+// Os recursos ficam ligados só se o app abriu com o Premium (o grátis tem só o jogo nas 4 contas)
+const premium = () => premiumAoAbrir;
+// Clicou num recurso do Premium no plano grátis: a tela do Premium abre dizendo qual
+function pedirPremium(recurso) {
+  recursoPedido = String(recurso ?? '');
+  const jaAberta = janela && !janela.isDestroyed();
+  abrirJanela();
+  if (jaAberta) janela.webContents.reload();
 }
 function ligarBarra(wc, w) {
   barra = wc;
@@ -279,4 +300,4 @@ function ligarBarra(wc, w) {
   wc.on('did-finish-load', enviarBarra);
 }
 
-module.exports = { iniciar, ligarBarra };
+module.exports = { iniciar, ligarBarra, premium, pedirPremium };

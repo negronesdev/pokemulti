@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('api', {
   snAbrir: () => ipcRenderer.send('sn:abrir'),
   pcAbrir: () => ipcRenderer.send('pc:abrir'),
   pcAgora: () => ipcRenderer.send('pc:agora'),
+  pcVendasReais: (id, moeda, dias) => ipcRenderer.invoke('pc:vendasReais', id, moeda, dias),
   pcOpcoes: novo => ipcRenderer.send('pc:opcoes', novo),
   onPcVend: fn => ipcRenderer.on('pcvend', (_e, v) => fn(v)),
   pkAbrir: () => ipcRenderer.send('pk:abrir'),

@@ -6,9 +6,9 @@ Programa para Windows que abre até 4 contas do pokeidle.io em uma janela, com S
 
 ## Como funciona
 
-1. Baixe e instale. São 7 dias grátis, com todos os recursos, sem cadastro.
+1. Baixe e instale. É grátis, sem cadastro, e os primeiros 7 dias são de Premium, com todos os recursos.
 2. Entre nas suas contas, na própria página do jogo, dentro do programa. Os logins ficam só no seu PC.
-3. Depois dos 7 dias, o programa abre bloqueado e mostra o valor da mensalidade e o QR do Pix. Envie o comprovante pelo WhatsApp ou pelo Instagram, e você recebe uma key que libera o programa por 30 dias.
+3. Depois dos 7 dias, o programa continua grátis, só com o jogo nas 4 contas. Para manter as ferramentas (Sniper, monitores do Mercado, Precificador, lives e as outras), ele mostra o valor da mensalidade e o QR do Pix. Envie o comprovante pelo WhatsApp ou pelo Instagram, e você recebe uma key que libera o Premium por 30 dias.
 
 ## O código está aberto para você conferir
 
@@ -20,9 +20,9 @@ A pasta [`codigo`](codigo) tem o código do programa, o mesmo que vira o instala
 
 O instalador é feito a partir desse código, com os comentários retirados e o código compactado. Se preferir, rode direto do código: instale o [Node.js](https://nodejs.org), abra um terminal na pasta `codigo` e rode `npm install` e depois `npm start`.
 
-Para conferir se o instalador que você baixou é o original, compare a impressão digital dele. No PowerShell, na pasta do download, rode `Get-FileHash .\PokeMulti-Setup.exe`. A da versão 1.1.0 é esta (maiúsculas ou minúsculas, tanto faz):
+Para conferir se o instalador que você baixou é o original, compare a impressão digital dele. No PowerShell, na pasta do download, rode `Get-FileHash .\PokeMulti-Setup.exe`. A da versão 1.2.0 é esta (maiúsculas ou minúsculas, tanto faz):
 
-`fce396f4ad7c546f8e2ff43e8754cae9e9d325678c75d7b92121f6deb9b9c76a`
+`0c635f5313fb576dd2f023cc7ea343e344cda955f5e1237a5c507efbf04d258d`
 
 ## O Windows mostrou um aviso
 

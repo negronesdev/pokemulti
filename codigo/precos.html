@@ -47,6 +47,11 @@
   .legenda { display:flex; flex-wrap:wrap; gap:4px 14px; font-size:12px; color:var(--mut); margin-top:6px; }
   .legenda i { display:inline-block; width:18px; height:3px; vertical-align:middle; margin-right:5px; }
   .legenda i.barra { width:9px; height:10px; }
+  .reais { margin-top:14px; padding:10px 12px; border:1px solid #333; border-radius:8px; }
+  .reais-cab { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+  .reais-cab .seg button { padding:2px 8px; }
+  .reais-cab .seg button.on { border-color:#a371f7; color:#d2a8ff; }
+  .reais .peq { font-size:12px; margin-top:6px; }
   .legenda i.media { width:9px; height:10px; border:1px dashed #7a7a84; }
   #alertas { border-top:1px solid var(--linha); max-height:34%; overflow-y:auto; padding:8px 14px; background:#18181b; }
   #alertas h2 { margin:0 0 6px; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--op); }
@@ -237,14 +242,53 @@
         <div class="stat"><span class="mut">Anúncios agora</span><b>${fmt(l[2] ?? 0)}</b></div>
       </div>
       <div id="graf"></div>
-      <div class="legenda"><span><i style="background:${op.moeda === 'orb' ? 'var(--gema)' : 'var(--coin)'}"></i>Menor anúncio</span><span><i style="background:var(--med)"></i>Média de venda 7d</span><span>em ${moedaTxt(op.moeda)}</span></div>`;
+      <div class="legenda"><span><i style="background:${op.moeda === 'orb' ? 'var(--gema)' : 'var(--coin)'}"></i>Menor anúncio</span><span><i style="background:var(--med)"></i>Média de venda 7d</span><span>em ${moedaTxt(op.moeda)}</span></div>
+      <div class="reais" id="reais"></div>`;
     det.querySelector('h1').textContent = nome(id);
+    reaisDesenhar(id);
     if (op.grafico === 'dia') { velas($('graf'), id); return; }
     const desde = Number(op.periodo) ? Date.now() - Number(op.periodo) * 864e5 : 0;
     grafico($('graf'), [
       { s: sMin.filter(p => p.em >= desde), cor: op.moeda === 'orb' ? 'var(--gema)' : 'var(--coin)', nome: 'Menor anúncio', grossa: op.valor === 'min' },
       { s: sMed.filter(p => p.em >= desde), cor: 'var(--med)', nome: 'Média 7d', grossa: op.valor === 'med' }
     ]);
+  }
+
+  // Vendas reais do item (a Tabela de preços do jogo filtrada por ele, pela Conta 1): maior, mediana e menor preço por
+  // unidade no período. Só busca no clique; o resultado fica guardado enquanto a janela estiver aberta.
+  const REAIS = new Map();
+  let reaisDias = 3;
+  const quandoTxt = ms => new Date(ms).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  function reaisDesenhar(id) {
+    const box = $('reais');
+    if (!box) return;
+    const k = `${id}:${op.moeda}:${reaisDias}`, r = REAIS.get(k);
+    const dd = [1, 3, 7].map(d => `<button data-d="${d}" class="${d === reaisDias ? 'on' : ''}">${d === 1 ? '24 h' : d + ' dias'}</button>`).join('');
+    let h = `<div class="reais-cab"><b>Vendas reais</b><span class="seg">${dd}</span><button id="reaisIr">${r && !r.lendo ? '↻ Buscar de novo' : 'Buscar no jogo'}</button></div>`;
+    if (!r) h += `<div class="mut">O maior, a mediana e o menor preço pago por unidade, em ${moedaTxt(op.moeda)}, lidos da Tabela de preços do jogo pela Conta 1.</div>`;
+    else if (r.lendo) h += '<div class="mut">Lendo as vendas no jogo… (uma página a cada meio segundo; pode levar até meio minuto)</div>';
+    else if (r.erro && !r.n) h += `<div class="aviso">Não consegui ler: ${r.erro}</div>`;
+    else if (!r.n) h += '<div class="mut">Nenhuma venda nesse período.</div>';
+    else {
+      h += `<div class="stats">
+        <div class="stat"><span class="mut">Maior venda</span><b>${fmt(r.max.un)}</b><span class="mut">${quandoTxt(r.max.em)}${r.max.qtd > 1 ? ` · lote de ${r.max.qtd}` : ''}</span></div>
+        <div class="stat"><span class="mut">Mediana</span><b>${fmt(r.mediana)}</b></div>
+        <div class="stat"><span class="mut">Menor venda</span><b>${fmt(r.min)}</b></div>
+        <div class="stat"><span class="mut">Vendas lidas</span><b>${fmt(r.n)}</b><span class="mut">${fmt(r.unid)} un.</span></div>
+      </div>
+      <div class="mut peq">As 5 mais caras: ${r.top.map(x => `${fmt(x.un)} (${quandoTxt(x.em)})`).join(' · ')}</div>`;
+      if (!r.chegou) h += `<div class="mut peq">O jogo mostra no máximo ~1.230 vendas por item: a leitura das recentes foi até ${quandoTxt(r.desde)}${r.porCaras ? ', e as mais caras foram lidas à parte, então a maior venda vale para o período todo' : '. A mediana e a menor são só desse trecho'}.</div>`;
+    }
+    box.innerHTML = h;
+    box.querySelectorAll('[data-d]').forEach(b => { b.onclick = () => { reaisDias = Number(b.dataset.d); reaisDesenhar(id); }; });
+    $('reaisIr').onclick = async () => {
+      const moeda = op.moeda, dias = reaisDias, kk = `${id}:${moeda}:${dias}`;
+      REAIS.set(kk, { lendo: true });
+      reaisDesenhar(id);
+      const res = await api.pcVendasReais(id, moeda, dias);
+      REAIS.set(kk, res);
+      if (op.sel === id) reaisDesenhar(id);
+    };
   }
 
   // Quantos saíram no dia, nesta moeda, pelo que o app contou da Tabela de preços do jogo: { n, valor, desde }. `desde`

@@ -70,24 +70,31 @@
     <button id="aplicar" class="principal"></button>
     <p id="msg" role="status"></p>
   </section>
-  <footer>Cada key vale para um PC e até a data combinada. Trocou de PC ou formatou? É só avisar. Seus logins e ajustes continuam guardados neste PC.</footer>
+  <footer>Fechar esta janela não muda nada: o jogo continua nas 4 contas. Cada key vale para um PC e até a data combinada. Trocou de PC ou formatou? É só avisar. Seus logins e ajustes continuam guardados neste PC.</footer>
 </main>
 <script src="qrcode.js"></script>
 <script>
   const $ = id => document.getElementById(id);
   let d = null;
 
+  // O plano grátis tem o jogo nas 4 contas; o Premium, as ferramentas
+  const RECURSOS = 'Sniper, monitores de Preços e de Pokémons, Precificador, Economia, Reposição, Melhor hunt, Pokédex do Mini Games, lives da Twitch e da Kick e Caixa do projeto';
   function titulos() {
-    if (d.modo === 'bloqueado') {
-      $('titulo').textContent = d.motivo === 'vencida' ? `Sua licença venceu em ${d.ateTxt}` : `Seu teste de ${d.testeDias} dias terminou`;
-      $('sub').textContent = 'O app está bloqueado até você colar uma nova key. Seus logins e ajustes estão guardados. São 3 passos:';
-      $('aplicar').textContent = 'Desbloquear';
+    if (d.modo === 'gratis') {
+      $('titulo').textContent = d.recurso ? `${d.recurso} é do Premium`
+        : d.motivo === 'vencida' ? `Seu Premium venceu em ${d.ateTxt}` : `Seus ${d.testeDias} dias de Premium grátis terminaram`;
+      $('sub').textContent = `O PokeMulti continua grátis, com o jogo nas 4 contas. O Premium traz de volta as ferramentas: ${RECURSOS}. São 3 passos:`;
+      $('aplicar').textContent = 'Ativar o Premium';
     } else if (d.modo === 'teste') {
-      $('titulo').textContent = `Teste grátis: ${d.dias === 1 ? 'falta 1 dia' : `faltam ${d.dias} dias`}`;
-      $('sub').textContent = `Vale até ${d.ateTxt}. Para continuar usando depois, são 3 passos:`;
+      $('titulo').textContent = `Premium grátis: ${d.dias === 1 ? 'falta 1 dia' : `faltam ${d.dias} dias`}`;
+      $('sub').textContent = `Vale até ${d.ateTxt}. Depois, o app continua grátis só com o jogo nas 4 contas. Para manter as ferramentas, são 3 passos:`;
+      $('aplicar').textContent = 'Aplicar key';
+    } else if (d.dias > 36500) {
+      $('titulo').textContent = 'Premium permanente';
+      $('sub').textContent = 'Este PC tem o Premium para sempre. Não precisa renovar.';
       $('aplicar').textContent = 'Aplicar key';
     } else {
-      $('titulo').textContent = `Licença válida até ${d.ateTxt}`;
+      $('titulo').textContent = `Premium até ${d.ateTxt}`;
       $('sub').textContent = 'Para renovar antes de vencer, são 3 passos:';
       $('aplicar').textContent = 'Aplicar key';
     }
@@ -141,7 +148,7 @@
       $('aplicar').disabled = false;
       return aviso(r.erro, 'erro');
     }
-    aviso(r.reabrindo ? `Pronto! Licença válida até ${r.ateTxt}. Reabrindo o app...` : `Pronto! Licença válida até ${r.ateTxt}.`, 'ok');
+    aviso(r.reabrindo ? `Pronto! Premium até ${r.ateTxt}. Reabrindo o app com as ferramentas ligadas...` : `Pronto! Premium até ${r.ateTxt}.`, 'ok');
     if (r.reabrindo) return;
     $('aplicar').disabled = false;
     $('key').value = '';
