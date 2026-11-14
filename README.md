@@ -20,9 +20,9 @@ A pasta [`codigo`](codigo) tem o código do programa, o mesmo que vira o instala
 
 O instalador é feito a partir desse código, com os comentários retirados e o código compactado. Se preferir, rode direto do código: instale o [Node.js](https://nodejs.org), abra um terminal na pasta `codigo` e rode `npm install` e depois `npm start`.
 
-Para conferir se o instalador que você baixou é o original, compare a impressão digital dele. No PowerShell, na pasta do download, rode `Get-FileHash .\PokeMulti-Setup.exe`. A da versão 1.2.0 é esta (maiúsculas ou minúsculas, tanto faz):
+Para conferir se o instalador que você baixou é o original, compare a impressão digital dele. No PowerShell, na pasta do download, rode `Get-FileHash .\PokeMulti-Setup.exe`. A da versão 1.3.0 é esta (maiúsculas ou minúsculas, tanto faz):
 
-`0c635f5313fb576dd2f023cc7ea343e344cda955f5e1237a5c507efbf04d258d`
+`227ae04a28b36261eb9e9c8aff4f7e25d63011d454e34efafb3966869ed421fe`
 
 ## O Windows mostrou um aviso
 

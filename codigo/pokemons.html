@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
-<title>Monitor de Pokémons do RMT</title>
+<title>Monitor de Pokémons</title>
 <style>
   :root { --bg:#151515; --box:#1f1f23; --linha:#2a2a30; --fg:#eee; --mut:#9a9a9a; --sobe:#3fb950; --desce:#f0544f; --gema:#e879f9; --coin:#f5c518; --azul:#8ab4f8; --op:#22d3ee; --shiny:#ffd166; }
   * { box-sizing:border-box; }
@@ -26,7 +26,13 @@
   #opcoes.aberto { display:flex; }
   #opcoes label { display:flex; align-items:center; gap:6px; }
   main { flex:1; display:flex; min-height:0; }
-  #lista { width:44%; overflow-y:auto; border-right:1px solid var(--linha); }
+  #esq { width:44%; display:flex; flex-direction:column; min-height:0; border-right:1px solid var(--linha); }
+  #lista { flex:1; overflow-y:auto; }
+  .abasTipo { margin:0; padding:0 8px; flex-wrap:nowrap; }
+  .abasTipo button { height:34px; }
+  #tipoInfo { padding:4px 12px 6px; font-size:12px; color:var(--mut); border-bottom:1px solid var(--linha); }
+  #tipoInfo:empty { display:none; }
+  .soTipo { font-size:11px; font-weight:600; padding:1px 7px; border-radius:10px; background:#3a2a10; color:var(--shiny); }
   .row { display:grid; grid-template-columns:1fr 56px 80px 80px 52px; gap:8px; align-items:center; padding:6px 12px; border-bottom:1px solid var(--linha); cursor:pointer; }
   .row:hover { background:#1c1c20; }
   .row.on { background:#2a2238; }
@@ -97,40 +103,94 @@
   .stat.clic:hover { border-color:#6b3fd6; }
   .aviso { color:#ffb86b; }
   rect[data-dia] { cursor:pointer; }
+  /* ---- Painel didático (13/11/2026): frase de filtros, 3 respostas no topo, abas, "Compensa?" e ajuda ---- */
+  .frase { color:var(--mut); }
+  .row { grid-template-columns:1fr 64px 96px 86px 60px; }
+  .cab [data-ord] { cursor:pointer; user-select:none; }
+  .cab [data-ord]:hover { color:#fff; }
+  .cab [data-ord].on { color:var(--op); }
+  .cards { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; margin:12px 0 8px; }
+  .card { background:var(--box); border:1px solid var(--linha); border-radius:8px; padding:10px 12px; min-width:0; }
+  .card b { display:block; font-size:22px; margin:2px 0; font-variant-numeric:tabular-nums; }
+  .card.clic { cursor:pointer; }
+  .card.clic:hover { border-color:#6b3fd6; }
+  .atencao { background:#33290f; border:1px solid #5c4a14; color:#f3d98b; border-radius:8px; padding:7px 10px; margin:0 0 6px; font-size:12px; line-height:1.45; }
+  .abas { display:flex; gap:2px; border-bottom:1px solid var(--linha); margin:12px 0 10px; flex-wrap:wrap; }
+  .abas button { border:0; border-bottom:2px solid transparent; border-radius:0; background:transparent; color:var(--mut); height:32px; padding:0 12px; }
+  .abas button:hover { color:#fff; background:transparent; }
+  .abas button.on { background:transparent; color:#fff; border-bottom-color:#8b5cf6; font-weight:600; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; font-weight:600; white-space:nowrap; }
+  .pill.bom { background:#12301c; color:#7ee787; }
+  .pill.ruim { background:#3a1f1f; color:#ff9a94; }
+  .pill.neutro { background:#26262c; color:var(--mut); font-weight:400; }
+  .focoTxt { font-size:12px; font-weight:400; color:var(--mut); }
+  .guia { color:var(--mut); font-size:12px; line-height:1.5; margin:0 0 8px; }
+  .guia b { color:#ddd; }
+  #ajuda { display:none; padding:10px 14px; border-bottom:1px solid var(--linha); background:#1a2430; line-height:1.55; font-size:12.5px; max-height:45%; overflow-y:auto; }
+  #ajuda.aberto { display:block; }
+  #ajuda dl { display:grid; grid-template-columns:max-content 1fr; gap:3px 14px; margin:6px 0 0; }
+  #ajuda dt { font-weight:600; color:#fff; }
+  #ajuda dd { margin:0; color:#c9d1d9; }
+  #alertas { display:none; }
+  #alertas.aberto { display:block; }
+  button.novo { border-color:var(--op); color:var(--op); }
+  details.avanc { margin:0 0 8px; }
+  details.avanc summary { cursor:pointer; color:var(--mut); font-size:12px; margin-bottom:6px; }
+  details.avanc summary:hover { color:#fff; }
 </style>
 </head>
 <body>
 <header>
-  <b>🐉 Monitor de Pokémons do RMT</b>
+  <b>🐉 Monitor de Pokémons</b>
   <span class="mut" id="info"></span>
   <span class="sp"></span>
+  <button id="sino" title="Anúncios bem abaixo do valor, dos pokémons que você marcou com ★">🔔 Pechinchas</button>
+  <button id="ajudaBtn" title="O que significa cada número desta tela">❓ Como ler</button>
   <button id="precificar" title="Quanto pedir, em gemas, por um pokémon das suas contas ou por uma ficha colada: Vender rápido, Preço justo e Esperar">💲 Precificar</button>
   <button id="cfg">⚙ Configurar</button>
-  <button id="agora" title="Busca vendas novas, a grade de espécies e avalia as observadas agora">Atualizar agora</button>
+  <button id="agora" title="Busca vendas novas, a lista de pokémons à venda e avalia os observados agora">Atualizar agora</button>
 </header>
 <div id="opcoes">
   <label>Vendas a cada <input type="number" id="o-vendasMin" min="10"> min</label>
-  <label>Grade de espécies a cada <input type="number" id="o-gradeMin" min="30"> min</label>
-  <label>Avaliar observadas ★ a cada <input type="number" id="o-avaliarMin" min="10"> min</label>
-  <label>Avisar anúncio <input type="number" id="o-alertaPct" min="5" max="90"> % abaixo do valor pela nota</label>
-  <label>com pelo menos <input type="number" id="o-minVendas" min="3"> vendas na conta</label>
+  <label>Lista de pokémons à venda a cada <input type="number" id="o-gradeMin" min="30"> min</label>
+  <label>Conferir os observados ★ a cada <input type="number" id="o-avaliarMin" min="10"> min</label>
+  <label>Avisar anúncio <input type="number" id="o-alertaPct" min="5" max="90"> % abaixo do valor</label>
+  <label>com pelo menos <input type="number" id="o-minVendas" min="3"> vendas parecidas</label>
   <label><input type="checkbox" id="o-alertas"> notificação</label>
 </div>
+<div id="ajuda">
+  <b>Como ler esta tela.</b> À esquerda, os pokémons do Mercado. Clique num deles e, à direita, o topo responde três perguntas: quanto estão pagando, qual o mais barato à venda e se ele vende rápido. Embaixo, as abas trazem os detalhes.
+  <dl>
+    <dt>Preço do meio</dt><dd>Metade das vendas saiu por menos que ele, metade por mais (é a mediana). Engana menos que a média, porque uma venda absurda não o puxa.</dd>
+    <dt>Nota</dt><dd>A nota que o jogo dá ao pokémon, de 0 a 10. Quanto maior, mais caro. Aparece como N3,56.</dd>
+    <dt>Vale cerca de</dt><dd>O preço do meio das vendas parecidas com aquele anúncio (nota e nível próximos) nos últimos 30 dias.</dd>
+    <dt>Compensa?</dt><dd>Compara o preço pedido com o "Vale cerca de". Verde = mais barato que o valor. Vermelho = mais caro. "Sem base" = não há vendas parecidas para comparar.</dd>
+    <dt>✨ Shiny</dt><dd>Versão rara, que vale muito mais. Fica fora do "Quanto estão pagando" para não enganar.</dd>
+    <dt>★ Observar</dt><dd>Marque até 8 pokémons. O app confere os anúncios deles sozinho e avisa as pechinchas no 🔔.</dd>
+    <dt>TM e Z</dt><dd>O pokémon vem com um golpe especial ensinado (AoE ou Z-Move), o que aumenta o valor.</dd>
+    <dt>🔒</dt><dd>Anúncio retido: ainda não pode ser comprado.</dd>
+    <dt>✨ Shiny e P5</dt><dd>As abas em cima da lista separam os raros. Em <b>Shiny</b> (✨, de qualquer potência) ou <b>P5</b> (potência 5, a mais alta, sem shiny), a lista, os números do pokémon e os anúncios contam só esse tipo, e à direita aparece o resumo com o que está à venda.</dd>
+    <dt>Avançado</dt><dd>IV (de 1 a 32 em cada atributo), potência (P1 a P5) e qualidade são os números de nascimento do pokémon. "Ataque" é uma nota de 0 a 10 do dano que ele faz com os golpes da espécie. Ficam em "Filtros e colunas avançadas".</dd>
+  </dl>
+</div>
 <div class="controles">
-  <span class="rot">Moeda</span>
+  <span class="frase">Mostrar vendas em</span>
   <span class="seg" id="moeda"><button data-v="0">Coins</button><button data-v="1">Gemas</button></span>
-  <span class="rot">Período</span>
-  <span class="seg" id="periodo" title="As vendas contadas na lista e na espécie"><button data-v="24h">24 h</button><button data-v="7d">7 dias</button><button data-v="30d">30 dias</button></span>
+  <span class="frase">de</span>
+  <span class="seg" id="periodo" title="As vendas contadas na lista e no pokémon escolhido"><button data-v="24h">Últimas 24 h</button><button data-v="7d">7 dias</button><button data-v="30d">30 dias</button></span>
   <span class="diaNav"><button id="diaAnt" title="Dia anterior">◀</button><select id="dia" class="dia" title="As vendas de um dia, da meia-noite à meia-noite (com o total do dia na moeda escolhida)"></select><button id="diaProx" title="Dia seguinte">▶</button></span>
-  <span class="rot">Ordem</span>
-  <span class="seg" id="ordem"><button data-v="vendas">Mais vendidos</button><button data-v="caros">Mais caros</button><button data-v="anuncios">Mais anúncios</button><button data-v="nome">Nome</button></span>
-  <label class="mut"><input type="checkbox" id="soObs"> só observadas ★</label>
-  <button id="verAtq" title="Busca no Mercado os anúncios com o maior IV de ATK e de SP.ATK (de qualquer espécie) e mostra quem bate mais forte, pelos golpes de cada um">⚔ Atacantes (todas as espécies)</button>
+  <span class="mut" id="resumoPer"></span>
   <span class="sp"></span>
-  <input type="search" id="busca" placeholder="buscar espécie…">
+  <label class="mut"><input type="checkbox" id="soObs"> só os que eu observo ★</label>
+  <button id="verAtq" title="Busca no Mercado os anúncios com o maior IV de ATK e de SP.ATK (de qualquer espécie) e mostra quem bate mais forte, pelos golpes de cada um">⚔ Atacantes</button>
+  <input type="search" id="busca" placeholder="buscar pokémon…">
 </div>
 <main>
-  <div id="lista"></div>
+  <div id="esq">
+    <div class="abas abasTipo" id="tipos" title="Separa os raros: com Shiny ou P5, a lista, os números e os anúncios contam só esse tipo"><button data-v="todos">Todos</button><button data-v="shiny">✨ Shiny</button><button data-v="p5">P5</button></div>
+    <div id="tipoInfo"></div>
+    <div id="lista"></div>
+  </div>
   <div id="lado"><div id="det"></div><div id="alertas"></div></div>
 </main>
 <div id="tip"></div>
@@ -141,6 +201,7 @@
   try { Object.assign(op, JSON.parse(localStorage.getItem('pk-op') || '{}'), { busca: '' }); } catch {}
   if (!['24h', '7d', '30d'].includes(op.periodo)) op.periodo = '24h'; // um dia escolhido não fica para a próxima abertura
   let D = null;
+  const salvarOp = () => { try { localStorage.setItem('pk-op', JSON.stringify({ ...op, busca: '' })); } catch {} };
   const $ = id => document.getElementById(id);
   const fmt = v => {
     if (v == null || !isFinite(v)) return '—';
@@ -243,7 +304,23 @@
   //   poder, recarga ms, nível em que libera, tipo]], l: 1 se lendário/mítico, i: posição na folha de ícones }
   let J = null;
   const perfis = new Map(), atqCache = new Map();
-  const icone = (id, tam = 24) => {
+  // ✨ O retrato com as cores de shiny (main.js → jogo-shiny.json). O que ainda não está guardado é pedido ao app de uma
+  // vez (meio segundo depois do último desenho), e até lá aparece o retrato comum
+  let SH = { looks: {}, img: {} };
+  const shinyPedidos = new Map(), shinyQuero = new Set();
+  let shinyRelogio = null;
+  const iconeShiny = (id, tam) => {
+    const lk = SH.looks?.[id], url = lk ? SH.img?.[lk] : '';
+    if (url) return `<img src="${url}" alt="" title="shiny" style="display:inline-block;vertical-align:middle;flex-shrink:0;width:${tam}px;height:${tam}px;object-fit:contain;image-rendering:pixelated">`;
+    if (!(id in (SH.looks || {})) && Date.now() - (shinyPedidos.get(id) || 0) > 5 * 60e3) {
+      shinyQuero.add(id);
+      clearTimeout(shinyRelogio);
+      shinyRelogio = setTimeout(() => { const ids = [...shinyQuero]; shinyQuero.clear(); for (const i of ids) shinyPedidos.set(i, Date.now()); api.pkShiny?.(ids); }, 500);
+    }
+    return null;
+  };
+  const icone = (id, tam = 24, shiny = false) => {
+    if (shiny) { const s = iconeShiny(id, tam); if (s) return s; }
     const e = J?.especies?.[id], ic = J?.icones;
     if (e?.i == null || !ic) return `<i class="ico" style="width:${tam}px;height:${tam}px"></i>`;
     const c = e.i % ic.cols, r = Math.floor(e.i / ic.cols);
@@ -312,7 +389,7 @@
   const focoBadge = (id, longo = false) => {
     const pf = perfil(id);
     if (!pf) return '';
-    const txt = longo ? `${NOME_FOCO[pf.foco]} ${Math.round(pf.foco === 'F' ? pf.fisPct : pf.foco === 'E' ? pf.espPct : Math.max(pf.fisPct, pf.espPct))}%` : pf.foco;
+    const txt = longo ? `${NOME_FOCO[pf.foco]} ${Math.round(pf.foco === 'F' ? pf.fisPct : pf.foco === 'E' ? pf.espPct : Math.max(pf.fisPct, pf.espPct))}%` : NOME_FOCO[pf.foco];
     return `<span class="foco ${pf.foco}" title="${dicaFoco(pf)}">${txt}</span>`;
   };
   // A força de UM anúncio. NOTA DE ATAQUE (0–10): o nascimento dele (IV de ATK/SP.ATK/SPD, qualidade, potência,
@@ -351,13 +428,13 @@
     const tag = Math.abs(b) >= 0.15 ? ` <span class="bon ${b > 0 ? 'pos' : 'neg'}">${b > 0 ? '+' : ''}${b.toFixed(1)}</span>` : '';
     return `<td class="r${b >= 0.3 ? ' acima' : ''}" title="${dica}"><b>${atq.nota.toFixed(2)}</b>${tag}</td>`;
   };
-  const LEGENDA_BONUS = '<div class="mut" style="margin-top:4px"><span class="bon pos">+0,4</span> ao lado da N.ATQ = <b>ataque acima da nota</b>: os IVs caíram nos stats que os golpes usam. O mercado só cobra a nota e o nível, então esse ataque vem de graça (fundo verde a partir de +0,3). Passe o mouse para ver a conta.</div>';
+  const LEGENDA_BONUS = '<div class="mut" style="margin-top:4px"><span class="bon pos">+0,4</span> ao lado do Ataque = <b>ataque acima da nota</b>: os IVs caíram nos stats que os golpes usam. O mercado só cobra a nota e o nível, então esse ataque vem de graça (fundo verde a partir de +0,3). Passe o mouse para ver a conta.</div>';
   const zBadge = l => l[13]
     ? `<span class="z" title="Z-Move ${l[13]} (${l[14] ? 'físico' : 'especial'} agora; o dono pode trocar): golpe de poder 2800 a cada 60 s, em área">Z</span>`
     : l[9] ? '<span class="z" title="Tem TM (AoE ou Z-Move)">TM</span>' : '';
 
   function render() {
-    for (const g of ['moeda', 'ordem', 'periodo']) for (const b of $(g).children) b.classList.toggle('on', String(op[g]) === b.dataset.v);
+    for (const g of ['moeda', 'periodo']) for (const b of $(g).children) b.classList.toggle('on', String(op[g]) === b.dataset.v);
     $('soObs').checked = op.soObs;
     try { localStorage.setItem('pk-op', JSON.stringify({ ...op, busca: '' })); } catch {}
     if (!D) return;
@@ -369,40 +446,76 @@
     $('agora').textContent = D.ocupado ? 'Atualizando…' : 'Atualizar agora';
     const desde = Date.now() - 864e5, i24 = D.vendas.findIndex(v => v[1] >= desde); // as vendas vêm em ordem de hora
     const n24 = i24 < 0 ? 0 : D.vendas.length - i24;
-    $('info').textContent = `${D.vendas.length.toLocaleString('pt-BR')} vendas guardadas (90 dias), ${n24.toLocaleString('pt-BR')} nas últimas 24 h` +
-      (D.ult?.vendas ? ` · vendas ${hh(D.ult.vendas)}` : '') + (D.gradeAtual ? ` · grade ${hh(D.gradeAtual.em)}` : '') +
-      (obs().length ? ` · ${obs().length} observada${obs().length > 1 ? 's' : ''}` : '') +
-      (D.jogo?.montando ? ' · montando os dados do jogo…' : D.jogo?.em ? ` · golpes e ícones de ${hora(D.jogo.em)}` : '');
+    const ultimo = Math.max(D.ult?.vendas || 0, D.gradeAtual?.em || 0);
+    $('info').textContent = (ultimo ? `Atualizado às ${hh(ultimo)}` : 'Ainda sem dados') + ` · ${n24.toLocaleString('pt-BR')} vendas nas últimas 24 h` +
+      (D.jogo?.montando ? ' · montando os dados do jogo…' : '');
+    $('info').title = `${D.vendas.length.toLocaleString('pt-BR')} vendas guardadas (90 dias)` +
+      (D.ult?.vendas ? ` · vendas lidas às ${hh(D.ult.vendas)}` : '') + (D.gradeAtual ? ` · lista de pokémons à venda lida às ${hh(D.gradeAtual.em)}` : '') +
+      (obs().length ? ` · ${obs().length} observado${obs().length > 1 ? 's' : ''}` : '') + (D.jogo?.em ? ` · golpes e ícones de ${hora(D.jogo.em)}` : '');
     $('verAtq').classList.toggle('on', op.vista === 'atacantes');
+    if (!['todos', 'shiny', 'p5'].includes(op.tipo)) op.tipo = 'todos';
+    if (op.tipo === 'todos' && op.vista === 'raros') op.vista = 'especie';
+    for (const b of $('tipos').children) b.classList.toggle('on', b.dataset.v === op.tipo);
 
     // Resumo por espécie: vendas do período na moeda, mediana, e da grade de agora o menor anúncio e os anúncios
     const pe = periodo();
     const por = {};
     let total = 0;
     for (const v of D.vendas) {
-      if (!noPeriodo(v, pe) || v[4] !== op.moeda || v[14]) continue; // [14]: transferência entre contas, não é preço de mercado
+      if (!noPeriodo(v, pe) || v[4] !== op.moeda || v[14] || !tipoOk(v[7], v[8])) continue; // [14]: transferência entre contas, não é preço de mercado
       (por[v[2]] ??= []).push(v[3]);
       total++;
     }
-    const ga = D.gradeAtual?.esp ?? {};
+    // Com Shiny ou P5, "Mais barato" e "À venda" vêm dos anúncios que o app buscou desse tipo (a grade do jogo conta todos)
+    const R = D.raros, moedaR = op.moeda ? 'orb' : 'gold';
+    let ga = D.gradeAtual?.esp ?? {};
+    if (op.tipo !== 'todos') {
+      ga = {};
+      if (R?.moeda === moedaR) for (const l of R.linhas) {
+        if (l[2] !== op.moeda || !l[15] || !tipoOk(l[5], l[6])) continue;
+        const g = (ga[l[15]] ??= [0, null, null]);
+        g[0]++;
+        g[op.moeda ? 2 : 1] = g[op.moeda ? 2 : 1] == null ? l[1] : Math.min(g[op.moeda ? 2 : 1], l[1]);
+      }
+      $('tipoInfo').innerHTML = R?.moeda === moedaR
+        ? `Só ${NOME_RARO[op.tipo]}. "Mais barato" e "À venda": da busca das ${hh(R.em)}, só os mais baratos de cada tipo.`
+        : `Só ${NOME_RARO[op.tipo]}. "Mais barato" e "À venda" aparecem depois de buscar os anúncios (no resumo, à direita).`;
+    } else $('tipoInfo').innerHTML = '';
     const ids = new Set([...Object.keys(por), ...Object.keys(ga)].map(Number));
     const busca = op.busca.trim().toLowerCase();
     let linhas = [...ids].map(id => ({
       id, n: por[id]?.length ?? 0, med: mediana(por[id] ?? []),
       menor: ga[id]?.[op.moeda ? 2 : 1] ?? null, anuncios: ga[id]?.[0] ?? 0
     })).filter(l => (l.n || l.menor != null) && (!busca || nome(l.id).toLowerCase().includes(busca)) && (!op.soObs || obs().includes(l.id)));
-    const ord = { vendas: (a, b) => b.n - a.n, caros: (a, b) => (b.med ?? 0) - (a.med ?? 0), anuncios: (a, b) => b.anuncios - a.anuncios, nome: (a, b) => nome(a.id).localeCompare(nome(b.id)) };
-    linhas.sort((a, b) => ord[op.ordem](a, b) || nome(a.id).localeCompare(nome(b.id)));
+    // A ordem vem do título da coluna: 1º clique no sentido natural (mais vendidos, mais caros, mais baratos...), 2º inverte
+    const ord = { vendas: (a, b) => b.n - a.n, caros: (a, b) => (b.med ?? -1) - (a.med ?? -1), barato: (a, b) => (a.menor ?? Infinity) - (b.menor ?? Infinity), anuncios: (a, b) => b.anuncios - a.anuncios, nome: (a, b) => nome(a.id).localeCompare(nome(b.id)) };
+    if (!ord[op.ordem]) op.ordem = 'vendas';
+    const sentido = op.ordDir === -1 ? -1 : 1;
+    linhas.sort((a, b) => sentido * ord[op.ordem](a, b) || nome(a.id).localeCompare(nome(b.id)));
 
     const lista = $('lista');
-    const grade = D.gradeAtual ? ` (grade das ${hh(D.gradeAtual.em)})` : '';
-    lista.innerHTML = `<div class="row cab"><span>Espécie (${linhas.length}) · ${total.toLocaleString('pt-BR')} vendas em ${moedaTxt(op.moeda)} ${pe.longo}${pe.dia && avisoDoDia(pe.dia) ? ` <span class="aviso" title="${avisoDoDia(pe.dia)}">⚠ dia incompleto</span>` : ''}</span>`
-      + `<span class="v">Vendas ${pe.curto}</span><span class="v">Mediana ${pe.curto}</span><span class="v" title="O menor anúncio agora${grade}">Menor anúncio</span><span class="v" title="Anúncios agora${grade}">Anúnc.</span></div>`;
-    if (!linhas.length) lista.insertAdjacentHTML('beforeend', '<div class="vazio">Ainda sem dados. A primeira coleta sai uns 3,5 minutos depois de abrir o app, ou clique em "Atualizar agora".</div>');
+    const grade = op.tipo !== 'todos' ? (R?.moeda === moedaR ? ` (busca das ${hh(R.em)})` : ' (ainda não buscado)') : D.gradeAtual ? ` (lido às ${hh(D.gradeAtual.em)})` : '';
+    $('resumoPer').innerHTML = `${total.toLocaleString('pt-BR')} vendas${op.tipo !== 'todos' ? ' de ' + NOME_RARO[op.tipo] : ''} ${pe.longo}${pe.dia && avisoDoDia(pe.dia) ? ` <span class="aviso" title="${avisoDoDia(pe.dia)}">⚠ dia incompleto</span>` : ''}`;
+    const seta = k => (op.ordem !== k ? '' : ((k === 'barato' || k === 'nome') === (sentido === 1) ? ' ▲' : ' ▼'));
+    const tit = (k, rot, dica, cls = 'v') => `<span class="${cls}${op.ordem === k ? ' on' : ''}" data-ord="${k}" title="${dica} Clique para ordenar.">${rot}${seta(k)}</span>`;
+    lista.innerHTML = `<div class="row cab">${tit('nome', `Pokémon (${linhas.length})`, 'Em ordem alfabética.', '')}`
+      + tit('vendas', 'Vendidos', `Quantos${op.tipo !== 'todos' ? ' ' + NOME_RARO[op.tipo] : ''} foram vendidos ${pe.longo}, em ${moedaTxt(op.moeda)}.`)
+      + tit('caros', 'Preço do meio', `O preço do meio das vendas ${pe.longo}: metade saiu por menos, metade por mais (a mediana).`)
+      + tit('barato', 'Mais barato', `O anúncio mais barato agora${grade}.`)
+      + tit('anuncios', 'À venda', `Quantos estão à venda agora${grade}.`) + '</div>';
+    lista.querySelectorAll('[data-ord]').forEach(s => {
+      s.onclick = () => {
+        if (op.ordem === s.dataset.ord) op.ordDir = sentido === 1 ? -1 : 1;
+        else { op.ordem = s.dataset.ord; op.ordDir = 1; }
+        render();
+      };
+    });
+    if (!linhas.length && op.tipo !== 'todos') lista.insertAdjacentHTML('beforeend', `<div class="vazio">Nenhuma venda de ${NOME_RARO[op.tipo]} em ${moedaTxt(op.moeda)} ${pe.longo}. Tente um período maior ou a outra moeda.</div>`);
+    else if (!linhas.length) lista.insertAdjacentHTML('beforeend', '<div class="vazio">Ainda sem dados. A primeira leitura sai uns 3,5 minutos depois de abrir o app, ou clique em "Atualizar agora".</div>');
     for (const l of linhas) {
       const el = document.createElement('div');
-      el.className = 'row' + (l.id === op.sel && op.vista !== 'atacantes' ? ' on' : '');
-      el.innerHTML = `<span class="n">${icone(l.id)}<span class="nm"></span>${focoBadge(l.id)}</span><span class="v">${l.n || '—'}</span><span class="v">${fmt(l.med)}</span><span class="v">${fmt(l.menor)}</span><span class="v">${l.anuncios || '—'}</span>`;
+      el.className = 'row' + (l.id === op.sel && op.vista !== 'atacantes' && op.vista !== 'raros' ? ' on' : '');
+      el.innerHTML = `<span class="n">${icone(l.id, 24, op.tipo === 'shiny')}<span class="nm"></span></span><span class="v">${l.n ? l.n.toLocaleString('pt-BR') : '—'}</span><span class="v">${fmt(l.med)}</span><span class="v">${fmt(l.menor)}</span><span class="v">${l.anuncios ? l.anuncios.toLocaleString('pt-BR') : '—'}</span>`;
       el.querySelector('.nm').textContent = (obs().includes(l.id) ? '★ ' : '') + nome(l.id);
       el.onclick = () => { op.sel = l.id; op.vista = 'especie'; render(); };
       lista.appendChild(el);
@@ -414,6 +527,7 @@
 
   function detalhe() {
     if (op.vista === 'atacantes') return detalheAtacantes();
+    if (op.vista === 'raros') return detalheRaros();
     const det = $('det'), id = op.sel, m = op.moeda;
     if (!id) { det.innerHTML = ''; return; }
     // Digitando num filtro: não refaz a tela (perderia o que está sendo digitado), só a tabela
@@ -423,7 +537,7 @@
     const pe = periodo();
     // As transferências entre contas da mesma pessoa ([14]) ficam fora de toda conta; o gráfico e a lista de vendas
     // as mostram, em cinza
-    const todas = D.vendas.filter(v => v[2] === id && v[4] === m);
+    const todas = D.vendas.filter(v => v[2] === id && v[4] === m && tipoOk(v[7], v[8]));
     const vendas = todas.filter(v => !v[14]);
     const vPer = vendas.filter(v => noPeriodo(v, pe));
     const transfPer = todas.filter(v => v[14] && noPeriodo(v, pe));
@@ -436,61 +550,114 @@
       const dias = Math.max(1, Math.min(pe.dias, (Date.now() - (D.vendas[0]?.[1] ?? Date.now())) / 864e5));
       compara = `${(vPer.length / dias).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} por dia`;
     }
-    const ga = D.gradeAtual?.esp?.[id];
+    // Com Shiny ou P5, o mais barato e os anúncios vêm dos anúncios buscados desse tipo (os deste pokémon, ou a busca geral)
+    let ga = D.gradeAtual?.esp?.[id];
+    if (op.tipo !== 'todos') {
+      const doTipo = l => l[2] === m && tipoOk(l[5], l[6]);
+      const deste = (D.ofertas?.[id]?.linhas ?? []).filter(doTipo);
+      const geral = D.raros?.moeda === (m ? 'orb' : 'gold') ? D.raros.linhas.filter(l => l[15] === id && doTipo(l)) : [];
+      const usar = deste.length ? deste : geral;
+      ga = usar.length ? [usar.length, m ? null : Math.min(...usar.map(l => l[1])), m ? Math.min(...usar.map(l => l[1])) : null] : null;
+    }
     const comNota = vPer.filter(v => !v[7] && v[5] != null);
     const notasTxt = comNota.length ? `N${Math.min(...comNota.map(v => v[5])).toFixed(2)} – N${Math.max(...comNota.map(v => v[5])).toFixed(2)}` : '—';
     const nivelMed = mediana(comNota.map(v => v[6]).filter(Boolean));
     const observada = obs().includes(id);
     const pf = perfil(id), statAtq = pf ? (pf.foco === 'M' ? 'ATK e SP.ATK' : pf.criterio === 'ivAtk' ? 'ATK' : 'SP.ATK') : '';
     det.dataset.vista = 'especie';
-    det.innerHTML = `<h1><span class="estrela ${observada ? 'on' : ''}" title="${observada ? 'Parar de observar' : 'Observar: o app avalia os anúncios desta espécie e avisa as pechinchas'}">★</span>${icone(id, 40)}<span class="t"></span>${focoBadge(id, true)}
-        <span class="sp"></span><button id="atqBtn" class="${op.atq ? 'on' : ''}" ${pf ? '' : 'disabled'} title="${pf ? `Busca os anúncios com o MAIOR IV de ${pf.criterio === 'ivAtk' ? 'ATK' : 'SP.ATK'} (o stat que os golpes desta espécie usam) e ordena pela Nota de ataque` : 'Esperando os dados do jogo (golpes)'}">⚔ Melhores atacantes</button>
-        <button id="verAn" ${D.ocupado ? 'disabled' : ''}>Ver anúncios agora</button></h1>
-      <div class="stats">
-        <div class="stat clic" id="stVendas" title="${transfPer.length ? `${transfPer.length} venda(s) entre contas da mesma pessoa (ex.: fulano → fulano2) ficaram fora das contas: o preço delas não é de mercado. ` : ''}Clique para ver as vendas, uma por uma"><span class="mut">Vendas ${pe.curto} (${moedaTxt(m)})</span><b>${vPer.length}</b><span class="mut">${vPer.filter(v => v[7]).length} shiny · ${compara}${transfPer.length ? ` · ${transfPer.length} entre contas (fora)` : ''}</span></div>
-        <div class="stat"><span class="mut">Mediana ${pe.curto}</span><b>${fmt(mediana(vPer.map(v => v[3])))}</b></div>
-        <div class="stat"><span class="mut">Menor anúncio agora</span><b>${fmt(ga?.[m ? 2 : 1])}</b><span class="mut">${ga ? ga[0] + ' anúncios' : ''}</span></div>
-        <div class="stat"><span class="mut">Notas vendidas (não shiny)</span><b>${notasTxt}</b><span class="mut">${nivelMed ? 'nível mediano ' + fmt(nivelMed) : ''}</span></div>
-        ${pf ? `<div class="stat" title="${dicaFoco(pf)}"><span class="mut">⚔ Foco dos golpes</span><b>${NOME_FOCO[pf.foco]} · ${Math.round(Math.max(pf.fisPct, pf.espPct))}%</b><span class="mut">IV que importa: ${statAtq}</span></div>` : ''}
+    const ABAS = [['venda', 'À venda agora'], ['vendas', 'Vendas feitas'], ['nota', 'Preço por nota'], ['dia', 'Dia a dia'], ['golpes', 'Golpes e ataque']];
+    if (!ABAS.some(a => a[0] === op.aba)) op.aba = 'venda';
+    // As 3 respostas do topo contam só os comuns (o shiny vale outra coisa); sem comum vendido, os shiny, com aviso
+    // Na aba Shiny, o shiny É o que se conta
+    const comuns = op.tipo === 'shiny' ? vPer : vPer.filter(v => !v[7]), shinys = op.tipo === 'shiny' ? [] : vPer.filter(v => v[7]);
+    const base = comuns.length ? comuns : shinys;
+    const meio = mediana(base.map(v => v[3]));
+    const diasPer = pe.dia || pe.dias === 1 ? 1 : Math.max(1, Math.min(pe.dias, (Date.now() - (D.vendas[0]?.[1] ?? Date.now())) / 864e5));
+    const porDiaN = vPer.length / diasPer;
+    const ritmo = !vPer.length ? 'Não vendeu' : porDiaN >= 20 ? 'Muito' : porDiaN >= 5 ? 'Sim' : porDiaN >= 1 ? 'Pouco' : 'Quase nada';
+    const menorAgora = ga?.[m ? 2 : 1] ?? null;
+    const s = n => (n === 1 ? '' : 's'), mil = n => Number(n).toLocaleString('pt-BR');
+    const avisos = [];
+    if (!vPer.length) avisos.push(`Nenhuma venda${op.tipo !== 'todos' ? ' de ' + NOME_RARO[op.tipo] : ''} em ${moedaTxt(m)} ${pe.longo}. Tente um período maior ou a outra moeda.`);
+    else if (!comuns.length) avisos.push(`As ${vPer.length} venda${s(vPer.length)} ${pe.longo} foram todas de shiny, que vale muito mais que o comum. O "Quanto estão pagando" acima é o preço do shiny.`);
+    else {
+      if (shinys.length) avisos.push(`${shinys.length} das ${vPer.length} vendas foram de shiny (preço do meio: ${fmt(mediana(shinys.map(v => v[3])))}). O shiny vale muito mais, por isso ficou fora do "Quanto estão pagando".`);
+      if (comuns.length < 5) avisos.push(`Só ${comuns.length} venda${s(comuns.length)} ${op.tipo === 'todos' ? 'de comum' : 'de ' + NOME_RARO[op.tipo]} ${pe.longo}: com tão poucas, o preço do meio pode enganar. Veja 7 ou 30 dias.`);
+    }
+    if (meio != null && menorAgora != null && comuns.length && menorAgora < meio * 0.5) avisos.push('O anúncio mais barato está bem abaixo do que estão pagando. Quase sempre é um pokémon de nota ou nível baixo: confira a coluna "Compensa?" antes de comprar.');
+    if (transfPer.length) avisos.push(`${transfPer.length} venda${s(transfPer.length)} entre contas da mesma pessoa ${transfPer.length === 1 ? 'ficou' : 'ficaram'} fora das contas: o preço não é de mercado.`);
+    if (pe.dia && avisoDoDia(pe.dia)) avisos.push(`Dia incompleto: ${avisoDoDia(pe.dia)}.`);
+    det.innerHTML = `<h1><span class="estrela ${observada ? 'on' : ''}" title="${observada ? 'Parar de observar' : 'Observar: o app confere os anúncios deste pokémon e avisa as pechinchas no 🔔'}">★</span>${icone(id, 40, op.tipo === 'shiny')}<span class="t"></span>${op.tipo !== 'todos' ? `<span class="soTipo" title="A aba ${NOME_RARO[op.tipo]} está escolhida: números, vendas e anúncios contam só ${NOME_RARO[op.tipo]}">só ${NOME_RARO[op.tipo]}</span>` : ''}${pf ? `<span class="focoTxt" title="${dicaFoco(pf)}">ataque ${NOME_FOCO[pf.foco].toLowerCase()}</span>` : ''}
+        <span class="sp"></span>${op.tipo !== 'todos' ? `<button id="voltarResumo" title="O resumo de todos os ${NOME_RARO[op.tipo]}">← Resumo dos ${NOME_RARO[op.tipo]}</button>` : ''}<button id="verAn" ${D.ocupado ? 'disabled' : ''} title="Busca de novo, no Mercado, os anúncios deste pokémon">⟳ Atualizar anúncios</button></h1>
+      <div class="cards">
+        <div class="card" title="Preço do meio (mediana): metade das vendas saiu por menos, metade por mais. Conta só os comuns: o shiny vale outra coisa."><span class="mut">Quanto estão pagando</span><b>${fmt(meio)}</b><span class="mut">${base.length ? `preço do meio de ${mil(base.length)} venda${s(base.length)}${comuns.length ? '' : ' de shiny'}, em ${moedaTxt(m)}` : `sem vendas em ${moedaTxt(m)}`}</span></div>
+        <div class="card clic" id="cdVenda" title="O anúncio mais barato deste pokémon no Mercado agora. Clique para ver os anúncios."><span class="mut">Mais barato à venda agora</span><b>${fmt(menorAgora)}</b><span class="mut">${ga ? `${mil(ga[0])} anúncio${s(ga[0])} no Mercado` : 'sem anúncios lidos'}</span></div>
+        <div class="card clic" id="cdVendas" title="Pelo número de vendas por dia: 20 ou mais = Muito · 5 ou mais = Sim · 1 ou mais = Pouco. Clique para ver as vendas, uma por uma."><span class="mut">Vende rápido?</span><b>${ritmo}</b><span class="mut">${mil(vPer.length)} venda${s(vPer.length)} ${pe.longo} · ${compara}</span></div>
       </div>
-      ${pf ? golpesHtml(id) : `<div class="mut">${D.jogo?.montando ? 'Montando os dados do jogo (golpes e ícones)…' : 'Sem os golpes desta espécie nos dados do jogo.'}</div>`}
-      <h2>${op.atq && pf ? `Anúncios com o maior IV de ${pf.criterio === 'ivAtk' ? 'ATK' : 'SP.ATK'} (ordem do Mercado)` : 'Anúncios à venda agora'}</h2>
-      <div id="filtros" class="filtros"></div>
-      <div id="ofertas"></div>
-      <h2>Preço × nota (vendas reais ${pe.longo})</h2>
-      <div id="disp"></div>
-      <div class="legenda"><span><i style="background:var(--azul)"></i>venda</span><span><i style="background:var(--shiny)"></i>shiny</span><span><i style="border:1px solid #8a8a8a"></i>entre contas da mesma pessoa (fora das contas)</span><span><i style="background:var(--op);border-radius:0;height:3px;width:16px"></i>mediana por faixa de nota (não shiny)</span><span>escala de preço em log · passe o mouse nos pontos</span></div>
-      <h2>Quanto vale por faixa de nota (vendas ${pe.longo})</h2>
-      <div id="faixas"></div>
-      <h2>Por dia</h2>
-      <div id="diario"></div>
-      <div class="legenda"><span><i style="background:#3a3a50;border-radius:2px"></i>nº de vendas</span><span><i style="background:var(--azul)"></i>mediana do dia (sem shiny)</span><span><i style="background:${m ? 'var(--gema)' : 'var(--coin)'}"></i>menor anúncio do dia</span><span>clique num dia para ver as vendas dele</span></div>
-      <div id="diaTab" style="margin-top:8px"></div>
-      <h2 id="h-vendas">Vendas ${pe.longo}${pe.dia && avisoDoDia(pe.dia) ? ` <span class="aviso" title="${avisoDoDia(pe.dia)}">⚠ dia incompleto</span>` : ''}</h2>
-      <div id="vendasLista"></div>`;
+      ${avisos.map(a => `<div class="atencao">⚠ ${esc(a)}</div>`).join('')}
+      <div class="abas">${ABAS.map(([k, t]) => `<button data-aba="${k}" class="${op.aba === k ? 'on' : ''}">${t}</button>`).join('')}</div>
+      <div id="abaCorpo"></div>`;
     det.querySelector('.t').textContent = nome(id);
     det.querySelector('.estrela').onclick = () => {
       const nova = observada ? obs().filter(x => x !== id) : [...obs(), id];
-      if (nova.length > 8) return alert('No máximo 8 espécies observadas (para não pesar no servidor).');
+      if (nova.length > 8) return alert('No máximo 8 pokémons observados (para não pesar no servidor).');
       api.pkOpcoes({ observadas: nova });
     };
     $('verAn').onclick = () => { $('verAn').disabled = true; $('verAn').textContent = 'Buscando…'; pedidasEm[id] = Date.now(); api.pkAvaliar(id, pedidoAtual(id)); };
-    $('atqBtn').onclick = () => {
-      op.atq = !op.atq;
-      op.ofOrd = null; // com o modo ligado a tabela vem pela Nota de ataque
-      try { localStorage.setItem('pk-op', JSON.stringify({ ...op, busca: '' })); } catch {}
-      pedidasEm[id] = Date.now();
-      api.pkAvaliar(id, pedidoAtual(id));
-      detalhe();
-    };
-    det.querySelector('details.golpes')?.addEventListener('toggle', e => { op.golpesAberto = e.target.open; try { localStorage.setItem('pk-op', JSON.stringify({ ...op, busca: '' })); } catch {} });
-    $('stVendas').onclick = () => $('h-vendas').scrollIntoView({ behavior: 'smooth' });
-    barraDeFiltros($('filtros'));
-    dispersao($('disp'), vPer, transfPer, pe.longo);
-    faixas($('faixas'), vPer);
-    diario($('diario'), $('diaTab'), vendas, id, m);
-    listaVendas($('vendasLista'), todas.filter(v => noPeriodo(v, pe)), pe);
-    ofertas($('ofertas'), id, m);
+    $('voltarResumo')?.addEventListener('click', () => { op.vista = 'raros'; render(); });
+    const irAba = k => { op.aba = k; salvarOp(); detalhe(); };
+    det.querySelectorAll('.abas button').forEach(b => { b.onclick = () => irAba(b.dataset.aba); });
+    $('cdVenda').onclick = () => irAba('venda');
+    $('cdVendas').onclick = () => irAba('vendas');
+    const corpo = $('abaCorpo');
+    if (op.aba === 'venda') {
+      corpo.innerHTML = `<p class="guia">Cada linha é um anúncio. <b>Vale cerca de</b> é o preço do meio das vendas parecidas (nota e nível próximos) nos últimos 30 dias. <b>Compensa?</b> compara o preço pedido com esse valor.</p>
+        <details class="avanc" id="avanc"${avancado() ? ' open' : ''}><summary>Filtros e colunas avançadas (ataque, IV, potência, qualidade)</summary>
+          <label class="mut" style="display:flex;gap:6px;align-items:center;margin-bottom:6px" title="${pf ? `Pede ao Mercado os anúncios com o MAIOR IV de ${pf.criterio === 'ivAtk' ? 'ATK' : 'SP.ATK'} (o atributo que os golpes deste pokémon usam) e ordena pela nota de Ataque` : 'Esperando os dados do jogo (golpes)'}"><input type="checkbox" id="atqBtn" ${op.atq ? 'checked' : ''} ${pf ? '' : 'disabled'}> Buscar os de maior ataque${pf ? ` (maior IV de ${pf.criterio === 'ivAtk' ? 'ATK' : 'SP.ATK'})` : ''}, em vez dos mais baratos</label>
+          <div id="filtros" class="filtros"></div>
+        </details>
+        <div id="ofertas"></div>`;
+      $('avanc').addEventListener('toggle', e => { op.avancado = e.target.open; salvarOp(); ofertas($('ofertas'), id, m); });
+      $('atqBtn').onchange = () => {
+        op.atq = $('atqBtn').checked;
+        op.ofOrd = null; // com o modo ligado a tabela vem pela nota de Ataque
+        salvarOp();
+        pedidasEm[id] = Date.now();
+        api.pkAvaliar(id, pedidoAtual(id));
+        ofertas($('ofertas'), id, m);
+      };
+      barraDeFiltros($('filtros'));
+      ofertas($('ofertas'), id, m);
+    } else if (op.aba === 'vendas') {
+      corpo.innerHTML = `<p class="guia">As vendas ${pe.longo}, a mais nova primeiro. ✨ é shiny. As linhas apagadas são vendas entre contas da mesma pessoa: aconteceram, mas ficam fora das contas.</p><div id="vendasLista"></div>`;
+      listaVendas($('vendasLista'), todas.filter(v => noPeriodo(v, pe)), pe);
+    } else if (op.aba === 'nota') {
+      corpo.innerHTML = `<p class="guia">Quanto maior a nota, mais caro. Cada ponto é uma venda ${pe.longo}, e a linha mostra o preço do meio em cada faixa de nota. Passe o mouse num ponto para ver a venda.</p>
+        <div id="disp"></div>
+        <div class="legenda"><span><i style="background:var(--azul)"></i>venda</span><span><i style="background:var(--shiny)"></i>shiny</span><span><i style="border:1px solid #8a8a8a"></i>entre contas da mesma pessoa (fora das contas)</span><span><i style="background:var(--op);border-radius:0;height:3px;width:16px"></i>preço do meio por faixa de nota (sem shiny)</span></div>
+        <h2>Preço por faixa de nota</h2>
+        <div id="faixas"></div>`;
+      dispersao($('disp'), vPer, transfPer, pe.longo);
+      faixas($('faixas'), vPer);
+    } else if (op.aba === 'dia') {
+      corpo.innerHTML = `<p class="guia">Os últimos 30 dias. Clique num dia, no gráfico ou na tabela, para ver só as vendas dele.</p>
+        <div id="diario"></div>
+        <div class="legenda"><span><i style="background:#3a3a50;border-radius:2px"></i>nº de vendas</span><span><i style="background:var(--azul)"></i>preço do meio do dia (sem shiny)</span><span><i style="background:${m ? 'var(--gema)' : 'var(--coin)'}"></i>anúncio mais barato do dia</span></div>
+        <div id="diaTab" style="margin-top:8px"></div>`;
+      diario($('diario'), $('diaTab'), vendas, id, m);
+    } else {
+      corpo.innerHTML = pf
+        ? `<p class="guia">Os golpes deste pokémon tiram <b>${Math.round(pf.espPct)}% do dano de golpes especiais</b> (usam o atributo SP.ATK) e <b>${Math.round(pf.fisPct)}% de golpes físicos</b> (usam ATK). Por isso, o número de nascimento que mais aumenta o dano dele é o <b>IV de ${statAtq}</b>.</p>
+           <button id="irAtq">⚔ Ver os anúncios de maior ataque deste pokémon</button>` + golpesHtml(id)
+        : `<p class="guia">${D.jogo?.montando ? 'Montando os dados do jogo (golpes e ícones)…' : 'Sem os golpes deste pokémon nos dados do jogo.'}</p>`;
+      $('irAtq')?.addEventListener('click', () => {
+        op.atq = true; op.ofOrd = null; op.aba = 'venda';
+        salvarOp();
+        pedidasEm[id] = Date.now();
+        api.pkAvaliar(id, pedidoAtual(id));
+        detalhe();
+      });
+    }
     // Escolheu uma espécie: busca os anúncios dela sozinho (se os guardados tiverem mais de 3 min),
     // uma vez por espécie a cada 3 min — o mesmo que abrir a espécie no Mercado do jogo; com outros filtros,
     // 15 s depois do último pedido. Sempre contando do último PEDIDO: com a busca falhando (Conta 1 sem conexão,
@@ -506,7 +673,8 @@
   const pedidasEm = {};
   // O pedido de anúncios de uma espécie: os filtros + (com "⚔ Melhores atacantes") o IV que o Mercado ordena
   const pedidoAtual = id => {
-    const f = filtrosServidor(), pf = op.atq ? perfil(id) : null;
+    const k = op.tipo === 'shiny' ? { shiny: 'so' } : op.tipo === 'p5' ? { potenciaMin: 5, potenciaMax: 5 } : {};
+    const f = { ...filtrosServidor(), ...k }, pf = op.atq ? perfil(id) : null;
     return pf ? { ...f, criterio: pf.criterio } : f;
   };
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -516,7 +684,7 @@
     const tot = Object.values(pf.porGolpe).reduce((s, v) => s + v, 0) || 1;
     const gs = e.g.map((g, i) => ({ g, pct: (pf.porGolpe[i] || 0) / tot * 100 })).filter(x => x.g[1] < 2 && x.g[2] > 0 && x.g[4] <= 100)
       .sort((a, b) => b.pct - a.pct || b.g[2] - a.g[2]);
-    let h = `<details class="golpes"${op.golpesAberto ? ' open' : ''}><summary>⚔ Golpes da espécie e de onde vem o dano (${gs.filter(x => x.g[1]).length} especiais, ${gs.filter(x => !x.g[1]).length} físicos, mais a Investida)</summary>
+    let h = `<details class="golpes" open style="margin-top:10px"><summary>⚔ Os golpes e de onde vem o dano (${gs.filter(x => x.g[1]).length} especiais, ${gs.filter(x => !x.g[1]).length} físicos, mais a Investida)</summary>
       <table class="an"><tr><th>Golpe</th><th>Tipo</th><th>Categoria</th><th class="r">Poder</th><th class="r">Recarga</th><th class="r">% do dano</th></tr>`;
     for (const { g, pct } of gs) {
       h += `<tr><td>${esc(g[0])}</td><td>${esc(g[5])}${e.t.includes(g[5]) ? ' <span class="mut">×1,5</span>' : ''}</td><td>${g[1] ? 'Especial (SP.ATK)' : 'Físico (ATK)'}</td>
@@ -541,7 +709,7 @@
     for (let n = x0; n <= x1; n++) s += `<text x="${X(n)}" y="${H - 8}" fill="#9a9a9a" font-size="11" text-anchor="middle">N${n}</text>`;
     // A linha da mediana por faixa de 0,25 de nota (só vendas não shiny)
     const med = faixasDeNota(v).map(([a, b]) => {
-      const p = v.filter(x => !x[7] && x[5] != null && x[5] >= a && x[5] < b).map(x => x[3]);
+      const p = v.filter(x => contaNoMeio(x) && x[5] != null && x[5] >= a && x[5] < b).map(x => x[3]);
       return p.length ? `${X((a + b) / 2).toFixed(1)},${Y(mediana(p)).toFixed(1)}` : null;
     }).filter(Boolean);
     if (med.length > 1) s += `<polyline points="${med.join(' ')}" fill="none" stroke="var(--op)" stroke-width="2"/>`;
@@ -553,15 +721,15 @@
   }
 
   function faixas(host, v) {
-    const ns = v.filter(x => !x[7]);
-    let h = '<table><tr><th>Nota</th><th class="r">Vendas</th><th class="r">Mediana</th><th class="r">Mais barata / mais cara</th><th class="r">Nível mediano</th></tr>';
+    const ns = v.filter(contaNoMeio);
+    let h = '<table><tr><th>Nota</th><th class="r">Vendas</th><th class="r">Preço do meio</th><th class="r">Mais barata / mais cara</th><th class="r">Nível do meio</th></tr>';
     for (const [a, b] of faixasDeNota(ns)) {
       const s = ns.filter(x => x[5] != null && x[5] >= a && x[5] < b);
       if (!s.length) continue;
       const p = s.map(x => x[3]);
       h += `<tr><td>N${a.toFixed(2)} – ${b.toFixed(2)}</td><td class="r">${s.length}</td><td class="r"><b>${fmt(mediana(p))}</b></td><td class="r">${fmt(Math.min(...p))} / ${fmt(Math.max(...p))}</td><td class="r">${fmt(mediana(s.map(x => x[6]).filter(Boolean)))}</td></tr>`;
     }
-    const sh = v.filter(x => x[7]);
+    const sh = op.tipo === 'shiny' ? [] : v.filter(x => x[7]);
     if (sh.length) { const p = sh.map(x => x[3]); h += `<tr><td>✨ shiny</td><td class="r">${sh.length}</td><td class="r"><b>${fmt(mediana(p))}</b></td><td class="r">${fmt(Math.min(...p))} / ${fmt(Math.max(...p))}</td><td class="r">${fmt(mediana(sh.map(x => x[6]).filter(Boolean)))}</td></tr>`; }
     if (!ns.length && !sh.length) h += '<tr><td colspan="5" class="mut">Sem vendas nesta moeda.</td></tr>';
     host.innerHTML = h + '</table>';
@@ -580,7 +748,8 @@
       const o = porDia[diaDe(v[1])];
       if (!o) continue;
       o.n++;
-      if (v[7]) o.shiny++; else o.precos.push(v[3]);
+      if (v[7]) o.shiny++;
+      if (contaNoMeio(v)) o.precos.push(v[3]);
     }
     const menor = dias.map(d => D.gradeDia?.[d]?.[id]?.[m ? 2 : 1] ?? null);
     const med = dias.map(d => mediana(porDia[d].precos));
@@ -612,7 +781,7 @@
     // Por cima de tudo, uma coluna invisível por dia: a dica com os números do dia e o clique
     dias.forEach((d, i) => {
       if (d < primeiroDia()) return;
-      const dica = `${nomeDia(d)}: ${qtd[i]} vendas${med[i] != null ? ' · mediana ' + fmt(med[i]) : ''}${menor[i] != null ? ' · menor anúncio ' + fmt(menor[i]) : ''}${avisoDoDia(d) ? '\n⚠ ' + avisoDoDia(d) : ''}\nclique para ver as vendas do dia`;
+      const dica = `${nomeDia(d)}: ${qtd[i]} vendas${med[i] != null ? ' · preço do meio ' + fmt(med[i]) : ''}${menor[i] != null ? ' · mais barato à venda ' + fmt(menor[i]) : ''}${avisoDoDia(d) ? '\n⚠ ' + avisoDoDia(d) : ''}\nclique para ver as vendas do dia`;
       s += `<rect data-dia="${d}" x="${X(i) - bw / 2}" y="${T}" width="${bw}" height="${H - T - B}" fill="transparent" data-tip="${esc(dica)}"/>`;
     });
     host.innerHTML = s + '</svg>';
@@ -620,8 +789,8 @@
     host.querySelectorAll('rect[data-dia]').forEach(r => { r.onclick = () => escolherPeriodo(r.dataset.dia); });
   }
   function tabelaDias(host, dias, porDia, id, m) {
-    let h = `<table class="an"><tr><th>Dia</th><th class="r">Vendas</th><th class="r" title="Quantas das vendas eram shiny">✨</th><th class="r">Mediana</th><th class="r">Mais barata</th><th class="r">Mais cara</th>
-      <th class="r" title="O menor anúncio visto no dia (a grade é lida a cada hora)">Menor anúncio</th><th class="r" title="Os anúncios na última leitura da grade no dia">Anúncios</th></tr>`;
+    let h = `<table class="an"><tr><th>Dia</th><th class="r">Vendas</th><th class="r" title="Quantas das vendas eram shiny">✨</th><th class="r">Preço do meio</th><th class="r">Mais barata</th><th class="r">Mais cara</th>
+      <th class="r" title="O anúncio mais barato visto no dia (a lista é lida a cada hora)">Mais barato à venda</th><th class="r" title="Quantos estavam à venda na última leitura do dia">À venda</th></tr>`;
     for (const d of [...dias].reverse()) {
       if (d < primeiroDia()) break;
       const { n, shiny, precos: p } = porDia[d], g = D.gradeDia?.[d]?.[id], av = avisoDoDia(d);
@@ -630,7 +799,7 @@
         <td class="r">${p.length ? fmt(Math.min(...p)) : '—'}</td><td class="r">${p.length ? fmt(Math.max(...p)) : '—'}</td>
         <td class="r">${fmt(g?.[m ? 2 : 1])}</td><td class="r">${g?.[0] ?? '—'}</td></tr>`;
     }
-    host.innerHTML = h + '</table><div class="mut" style="margin-top:4px">Mediana, mais barata e mais cara sem os shiny.</div>';
+    host.innerHTML = h + '</table><div class="mut" style="margin-top:4px">Preço do meio, mais barata e mais cara sem os shiny.</div>';
     host.querySelectorAll('tr[data-dia]').forEach(tr => { tr.onclick = () => escolherPeriodo(tr.dataset.dia); });
   }
 
@@ -638,8 +807,8 @@
   // quem. As entre contas da mesma pessoa aparecem apagadas: aconteceram, mas ficam fora das contas.
   const contaNome = i => (i == null ? '' : D.contas?.[i] ?? '');
   const COLS_V = [
-    ['em', 'Quando', v => v[1]], ['nota', 'Nota', v => v[5], 'r'], ['nivel', 'Nível', v => v[6], 'r'], ['potencia', 'P', v => v[8], 'r'],
-    ['iv', 'IV', v => v[9], 'r'], ['qualidade', 'Q', v => v[10], 'r'], ['preco', 'Preço', v => v[3], 'r'],
+    ['em', 'Quando', v => v[1]], ['nota', 'Nota', v => v[5], 'r'], ['nivel', 'Nível', v => v[6], 'r'], ['potencia', 'Potência', v => v[8], 'r'],
+    ['iv', 'IV total', v => v[9], 'r'], ['qualidade', 'Qualidade', v => v[10], 'r'], ['preco', 'Preço', v => v[3], 'r'],
     ['vendedor', 'Vendedor', v => contaNome(v[12]).toLowerCase() || null], ['comprador', 'Comprador', v => contaNome(v[13]).toLowerCase() || null]
   ];
   op.vdOrd ??= null; // { col, dir }: coluna clicada; null = a mais nova primeiro
@@ -683,7 +852,7 @@
   // ---- Os FILTROS dos anúncios. Nota, nível, potência, IV, qualidade e "só shiny" vão ao servidor no
   // pedido (as mesmas faixas do Mercado do jogo), e a busca recorta TODOS os anúncios da espécie; preço
   // máximo, "sem shiny" e TM são aplicados aqui. Ficam guardados entre uma abertura e outra.
-  const FAIXAS = [['nota', 'Nota', 0.01], ['nivel', 'Nível', 1], ['potencia', 'P', 1], ['iv', 'IV', 1], ['qualidade', 'Q', 0.01]];
+  const FAIXAS = [['nota', 'Nota', 0.01], ['nivel', 'Nível', 1], ['potencia', 'Potência', 1], ['iv', 'IV total', 1], ['qualidade', 'Qualidade', 0.01]];
   const filtrosVazios = () => ({ notaMin: '', notaMax: '', nivelMin: '', nivelMax: '', potenciaMin: '', potenciaMax: '', ivMin: '', ivMax: '', qualidadeMin: '', qualidadeMax: '', precoMax: '', shiny: 'todos', tm: 'todos' });
   op.f = { ...filtrosVazios(), ...(op.f || {}) };
   // Uma vez só: zera os filtros que ficaram salvos do teste de 24/10/2026 (o "IV mín 155")
@@ -747,11 +916,26 @@
   // Colunas clicáveis: 1º clique crescente, 2º decrescente. [chave, título, valor, classe, dica]
   const DICA_NATQ = 'Nota de ataque (0–10): o nascimento deste pokémon medido pelo DANO que ele faz com os golpes da espécie — IV de ATK, SP.ATK e SPD, qualidade, potência e shiny —, na mesma escala da nota do jogo (0 = pior nascimento possível da espécie, 10 = o melhor). Não conta o nível nem o Z-Move.';
   const COLS = [
-    ['nota', 'Nota', r => r.l[3]], ['natq', 'N.ATQ', r => r.atq?.nota, 'r', DICA_NATQ],
-    ['ivAtk', 'ATK', r => r.l[12]?.[1], 'r', 'IV de ATK (1–32): golpes físicos e a Investida'], ['ivSpAtk', 'SP.ATK', r => r.l[12]?.[3], 'r', 'IV de SP.ATK (1–32): golpes especiais'],
-    ['nivel', 'Nível', r => r.l[4]], ['potencia', 'P', r => r.l[6]], ['iv', 'IV', r => r.l[10], 'r'], ['qualidade', 'Q', r => r.l[11], 'r'],
-    ['preco', 'Preço', r => r.l[1], 'r'], ['vale', 'Vale ~', r => r.est, 'r'], ['desconto', 'Desconto', r => r.desc, 'r'], ['vendedor', 'Vendedor', r => String(r.l[7] || '').toLowerCase()]
+    ['nota', 'Nota', r => r.l[3], '', 'A nota que o jogo dá ao pokémon, de 0 a 10. ✨ = shiny.'],
+    ['natq', 'Ataque', r => r.atq?.nota, 'r', DICA_NATQ],
+    ['ivAtk', 'IV ATK', r => r.l[12]?.[1], 'r', 'IV de ATK (1–32): golpes físicos e a Investida'], ['ivSpAtk', 'IV SP.ATK', r => r.l[12]?.[3], 'r', 'IV de SP.ATK (1–32): golpes especiais'],
+    ['nivel', 'Nível', r => r.l[4], 'r', 'O nível do pokémon'], ['potencia', 'Potência', r => r.l[6], 'r', 'Potência de nascimento, de P1 a P5'],
+    ['iv', 'IV total', r => r.l[10], 'r', 'A soma dos 6 IVs (de 6 a 192)'], ['qualidade', 'Qualidade', r => r.l[11], 'r', 'Qualidade de nascimento (de 0,8 a 1,8)'],
+    ['preco', 'Preço', r => r.l[1], 'r', 'O preço pedido no anúncio'],
+    ['vale', 'Vale cerca de', r => r.est, 'r', 'O preço do meio das vendas parecidas (nota e nível próximos) nos últimos 30 dias'],
+    ['desconto', 'Compensa?', r => r.desc, '', 'Compara o preço pedido com o "Vale cerca de". Verde = mais barato que o valor; vermelho = mais caro.'],
+    ['vendedor', 'Vendedor', r => String(r.l[7] || '').toLowerCase()]
   ];
+  // Sem o avançado, só o que responde "compensa?": nota, nível, preço, quanto vale e a comparação
+  const COLS_SIMPLES = ['nota', 'nivel', 'preco', 'vale', 'desconto', 'vendedor'];
+  const avancado = () => !!(op.avancado || op.atq || temFiltro());
+  const compensa = (desc, bom) => {
+    if (desc == null) return '<span class="pill neutro" title="Sem vendas parecidas o bastante nos últimos 30 dias para comparar">sem base</span>';
+    if (desc >= 5) return `<span class="pill bom">${Math.round(desc)}% mais barato${bom ? ' 🔥' : ''}</span>`;
+    if (desc > -5) return '<span class="pill neutro" title="A menos de 5% do valor">no preço</span>';
+    const caro = -desc;
+    return `<span class="pill ruim">${caro >= 95 ? `${((caro + 100) / 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} vezes o valor` : `${Math.round(caro)}% mais caro`}</span>`;
+  };
   // O IV que importa para os golpes da espécie fica em destaque (no misto, os dois)
   const relevante = (pf, stat) => !!pf && (pf.foco === 'M' || pf.criterio === stat);
   function ordenar(lin) {
@@ -777,7 +961,7 @@
       host.querySelector('#tentar')?.addEventListener('click', () => { pedidasEm[id] = Date.now(); api.pkAvaliar(id, pedidoAtual(id)); });
       return;
     }
-    const daMoeda = of.linhas.filter(l => l[2] === m);
+    const daMoeda = of.linhas.filter(l => l[2] === m && tipoOk(l[5], l[6]));
     const pf = perfil(id);
     const lin = ordenar(daMoeda.filter(passa).map(l => {
       const av = avaliar(id, m, { nota: l[3], nivel: l[4], shiny: l[5], potencia: l[6], tm: l[9] });
@@ -786,24 +970,32 @@
     const outra = of.linhas.filter(l => l[2] !== m).length;
     const comFiltroNoServidor = of.filtros && Object.keys(of.filtros).length;
     const criterio = of.pedido?.criterio;
-    let h = aviso + `<div class="mut" style="margin-bottom:4px"><button id="tentar" style="height:22px;padding:0 8px;margin-right:6px" title="Buscar os anúncios de novo">⟳</button>Buscado às ${hh(of.em)}${comFiltroNoServidor ? ' (já com os filtros)' : ''}${D.ocupado ? ' · <b>buscando de novo…</b>' : ''} · <b>${lin.length}</b> de ${daMoeda.length} em ${moedaTxt(m)}${temFiltro() ? ' passam nos filtros' : ''}${outra ? ` (e ${outra} em ${moedaTxt(m ? 0 : 1)})` : ''} · ${criterio ? `os de maior IV de ${criterio === 'ivAtk' ? 'ATK' : 'SP.ATK'}` : 'os mais baratos'}, até 3 páginas. Clique no título de uma coluna para ordenar.</div>`;
-    h += '<table class="an"><tr>' + COLS.map(([k, rot, , cls, dica]) => {
-      const on = op.ofOrd?.col === k || (!op.ofOrd && op.atq && k === 'natq');
+    const cols = avancado() ? COLS : COLS.filter(c => COLS_SIMPLES.includes(c[0]));
+    let h = aviso + `<div class="mut" style="margin-bottom:4px"><button id="tentar" style="height:22px;padding:0 8px;margin-right:6px" title="Buscar os anúncios de novo">⟳</button>Lido às ${hh(of.em)}${D.ocupado ? ' · <b>buscando de novo…</b>' : ''} · <b>${lin.length}</b> de ${daMoeda.length} anúncio${daMoeda.length === 1 ? '' : 's'} em ${moedaTxt(m)}${temFiltro() ? ' passam nos filtros' : ''}${outra ? ` (e ${outra} em ${moedaTxt(m ? 0 : 1)})` : ''}${criterio ? ` · os de maior IV de ${criterio === 'ivAtk' ? 'ATK' : 'SP.ATK'}` : ''}. Clique no título de uma coluna para ordenar.</div>`;
+    h += '<table class="an"><tr>' + cols.map(([k, rot, , cls, dica]) => {
+      const on = op.ofOrd?.col === k || (!op.ofOrd && (op.atq ? k === 'natq' : k === 'desconto'));
       return `<th class="ord ${cls || ''}${on ? ' on' : ''}" data-col="${k}" title="${esc(dica || 'Ordenar por ' + rot)}">${rot}${on ? (op.ofOrd ? (op.ofOrd.dir > 0 ? ' ▲' : ' ▼') : ' ▼') : ''}</th>`;
     }).join('') + '<th></th></tr>';
-    for (const { l, est, n, desc, atq } of lin.slice(0, 80)) {
-      const bom = desc != null && desc >= D.opcoes.alertaPct;
-      h += `<tr class="${bom ? 'fogo' : ''}"><td>${l[5] ? '✨ ' : ''}N${(l[3] ?? 0).toFixed(2)}${zBadge(l)}</td>
-        ${celulaNatq(atq)}
-        <td class="r ${relevante(pf, 'ivAtk') ? 'rel' : ''}">${l[12]?.[1] ?? '—'}</td><td class="r ${relevante(pf, 'ivSpAtk') ? 'rel' : ''}">${l[12]?.[3] ?? '—'}</td>
-        <td>${l[4] ?? ''}</td><td>${l[6] ?? ''}</td>
-        <td class="r">${l[10] ?? '—'}</td><td class="r">${l[11] != null ? Number(l[11]).toFixed(2) : '—'}</td>
-        <td class="r"><b>${fmt(l[1])}</b></td><td class="r" title="${n ? 'mediana de ' + n + ' vendas parecidas' : 'sem vendas parecidas o bastante'}">${fmt(est)}</td>
-        <td class="r ${desc == null ? '' : desc > 0 ? 'barato' : 'caro'}">${desc == null ? '—' : (desc > 0 ? '−' : '+') + Math.abs(desc).toFixed(0) + '%'}${bom ? ' 🔥' : ''}</td>
-        <td class="vend"></td><td><button class="abrir" data-id="${l[0]}" title="Abre este anúncio no jogo, na Conta 1">Abrir no jogo</button></td></tr>`;
-    }
     const vis = lin.slice(0, 80);
-    host.innerHTML = h + '</table>' + (vis.some(r => r.atq && Math.abs(r.atq.bonus) >= 0.15) ? LEGENDA_BONUS : '');
+    const celula = {
+      nota: ({ l }) => `<td>${l[5] ? '✨ ' : ''}N${(l[3] ?? 0).toFixed(2).replace('.', ',')}${zBadge(l)}</td>`,
+      natq: ({ atq }) => celulaNatq(atq),
+      ivAtk: ({ l }) => `<td class="r ${relevante(pf, 'ivAtk') ? 'rel' : ''}">${l[12]?.[1] ?? '—'}</td>`,
+      ivSpAtk: ({ l }) => `<td class="r ${relevante(pf, 'ivSpAtk') ? 'rel' : ''}">${l[12]?.[3] ?? '—'}</td>`,
+      nivel: ({ l }) => `<td class="r">${l[4] != null ? Number(l[4]).toLocaleString('pt-BR') : ''}</td>`,
+      potencia: ({ l }) => `<td class="r">${l[6] != null ? 'P' + l[6] : ''}</td>`,
+      iv: ({ l }) => `<td class="r">${l[10] ?? '—'}</td>`,
+      qualidade: ({ l }) => `<td class="r">${l[11] != null ? Number(l[11]).toFixed(2).replace('.', ',') : '—'}</td>`,
+      preco: ({ l }) => `<td class="r"><b>${fmt(l[1])}</b></td>`,
+      vale: ({ est, n }) => `<td class="r" title="${n ? 'preço do meio de ' + n + ' vendas parecidas' : 'sem vendas parecidas o bastante'}">${fmt(est)}</td>`,
+      desconto: ({ desc }) => `<td>${compensa(desc, desc != null && desc >= D.opcoes.alertaPct)}</td>`,
+      vendedor: () => '<td class="vend"></td>'
+    };
+    for (const r of vis) {
+      const bom = r.desc != null && r.desc >= D.opcoes.alertaPct;
+      h += `<tr class="${bom ? 'fogo' : ''}">${cols.map(c => celula[c[0]](r)).join('')}<td><button class="abrir" data-id="${r.l[0]}" title="Abre este anúncio no jogo, na Conta 1">Abrir no jogo</button></td></tr>`;
+    }
+    host.innerHTML = h + '</table>' + (avancado() && vis.some(r => r.atq && Math.abs(r.atq.bonus) >= 0.15) ? LEGENDA_BONUS : '');
     host.querySelectorAll('td.vend').forEach((td, i) => { td.textContent = vis[i].l[7] + (vis[i].l[8] > Date.now() ? ' 🔒' : ''); if (vis[i].l[8] > Date.now()) td.title = 'Retido até ' + hora(vis[i].l[8]); });
     host.querySelectorAll('button.abrir').forEach(b => { b.onclick = () => api.pkAbrirAnuncio(Number(b.dataset.id)); });
     host.querySelector('#tentar')?.addEventListener('click', () => { pedidasEm[id] = Date.now(); api.pkAvaliar(id, pedidoAtual(id)); });
@@ -821,11 +1013,11 @@
   // ---- ⚔ ATACANTES de todas as espécies: os anúncios de maior IV de ATK e de SP.ATK que o app buscou no
   // Mercado (main.js → pkmBuscarAtacantes), medidos pelos golpes de cada espécie
   const COLS_ATQ = [
-    ['especie', 'Espécie', r => nome(r.esp).toLowerCase()], ['foco', 'Foco', r => r.pf?.fisPct],
+    ['especie', 'Pokémon', r => nome(r.esp).toLowerCase()], ['foco', 'Golpes', r => r.pf?.fisPct],
     ['forca', '⚔ Dano/s', r => r.atq?.forca, 'r', 'Dano por segundo no Nv 100 contra um alvo neutro, com os golpes da espécie, o nascimento deste pokémon e o Z-Move se tiver. É o que compara espécies diferentes.'],
-    ['natq', 'N.ATQ', r => r.atq?.nota, 'r', DICA_NATQ],
-    ['ivAtk', 'ATK', r => r.l[12]?.[1], 'r', 'IV de ATK (1–32)'], ['ivSpAtk', 'SP.ATK', r => r.l[12]?.[3], 'r', 'IV de SP.ATK (1–32)'],
-    ['nota', 'Nota', r => r.l[3], 'r'], ['nivel', 'Nv', r => r.l[4], 'r'], ['potencia', 'P', r => r.l[6], 'r'],
+    ['natq', 'Ataque', r => r.atq?.nota, 'r', DICA_NATQ],
+    ['ivAtk', 'IV ATK', r => r.l[12]?.[1], 'r', 'IV de ATK (1–32)'], ['ivSpAtk', 'IV SP.ATK', r => r.l[12]?.[3], 'r', 'IV de SP.ATK (1–32)'],
+    ['nota', 'Nota', r => r.l[3], 'r'], ['nivel', 'Nível', r => r.l[4], 'r'], ['potencia', 'Potência', r => r.l[6], 'r'],
     ['preco', 'Preço', r => r.l[1], 'r'], ['vendedor', 'Vendedor', r => String(r.l[7] || '').toLowerCase()]
   ];
   op.atOrd ??= null;
@@ -836,15 +1028,17 @@
     det.dataset.vista = 'atacantes';
     det.dataset.especie = '';
     det.innerHTML = `<h1>⚔ Melhores atacantes à venda<span class="sp"></span>
+        <button id="voltarAtq">← Voltar ao pokémon</button>
         <button id="buscarAtq" ${D.ocupado || !J ? 'disabled' : ''}>${D.ocupado ? 'Buscando…' : A ? 'Buscar de novo' : 'Buscar agora'}</button></h1>
       <div class="explica">O app pede ao Mercado os anúncios em <b>${moedaTxt(m)}</b> com o <b>maior IV de ATK</b> e os com o <b>maior IV de SP.ATK</b>, de qualquer espécie
         (3 páginas de cada, os mais baratos dentro do mesmo IV — 6 pedidos, um a cada 1,2 s), e mede cada um pelos <b>golpes da espécie dele</b>:
-        <b>Foco</b> diz de onde vem o dano (E = golpes especiais, usam SP.ATK · F = físicos, usam ATK · M = os dois), e o IV em destaque é o que importa;
-        <b>⚔ Dano/s</b> é quanto ele bate no Nv 100 — compara espécies; <b>N.ATQ</b> é a nota de ataque do nascimento, de 0 a 10, dentro da espécie.
-        Nota, nível, P, IV e qualidade dos filtros vão no pedido; preço, shiny e TM recortam aqui.</div>
+        <b>Golpes</b> diz de onde vem o dano (Especial = usam SP.ATK · Físico = usam ATK · Misto = os dois), e o IV em destaque é o que importa;
+        <b>⚔ Dano/s</b> é quanto ele bate no nível 100 — compara espécies; <b>Ataque</b> é a nota de ataque do nascimento, de 0 a 10, dentro da espécie.
+        Nota, nível, potência, IV e qualidade dos filtros vão no pedido; preço, shiny e TM recortam aqui.</div>
       <div id="filtros" class="filtros"></div>
       <div id="atqLista"></div>`;
     $('buscarAtq').onclick = () => { $('buscarAtq').disabled = true; $('buscarAtq').textContent = 'Buscando…'; api.pkAtacantes(m ? 'orb' : 'gold', filtrosServidor()); };
+    $('voltarAtq').onclick = () => { op.vista = 'especie'; render(); };
     barraDeFiltros($('filtros'));
     tabelaAtacantes($('atqLista'));
   }
@@ -868,14 +1062,14 @@
       if (x == null) return 1; if (y == null) return -1;
       return (typeof x === 'string' ? x.localeCompare(y) : x - y) * dir || a.l[1] - b.l[1];
     });
-    let h = aviso + `<div class="mut" style="margin-bottom:4px">Buscado às ${hh(A.em)}${D.ocupado ? ' · <b>buscando de novo…</b>' : ''} · <b>${lin.length}</b> de ${todas.length} anúncios${temFiltro() ? ' passam nos filtros' : ''} · clique na espécie para ver os anúncios dela.</div>`;
+    let h = aviso + `<div class="mut" style="margin-bottom:4px">Buscado às ${hh(A.em)}${D.ocupado ? ' · <b>buscando de novo…</b>' : ''} · <b>${lin.length}</b> de ${todas.length} anúncios${temFiltro() ? ' passam nos filtros' : ''} · clique no pokémon para ver os anúncios dele.</div>`;
     h += '<table class="an"><tr>' + COLS_ATQ.map(([k, rot, , cls, dica]) => {
       const on = o ? o.col === k : k === 'forca';
       return `<th class="ord ${cls || ''}${on ? ' on' : ''}" data-col="${k}" title="${esc(dica || 'Ordenar por ' + rot)}">${rot}${on ? (dir > 0 ? ' ▲' : ' ▼') : ''}</th>`;
     }).join('') + '<th></th></tr>';
     const vis = lin.slice(0, 150);
     for (const { l, esp, pf, atq } of vis) {
-      h += `<tr><td><span class="lnk" data-esp="${esp}">${icone(esp, 22)}<span class="nmx"></span></span></td><td>${focoBadge(esp)}</td>
+      h += `<tr><td><span class="lnk" data-esp="${esp}">${icone(esp, 22, !!l[5])}<span class="nmx"></span></span></td><td>${focoBadge(esp)}</td>
         <td class="r"><b>${atq ? fmt(atq.forca) : '—'}</b></td>${celulaNatq(atq)}
         <td class="r ${relevante(pf, 'ivAtk') ? 'rel' : ''}">${l[12]?.[1] ?? '—'}</td><td class="r ${relevante(pf, 'ivSpAtk') ? 'rel' : ''}">${l[12]?.[3] ?? '—'}</td>
         <td class="r">${l[5] ? '✨' : ''}${l[3] != null ? Number(l[3]).toFixed(2) : '—'}${zBadge(l)}</td><td class="r">${l[4] ?? ''}</td><td class="r">${l[6] ?? ''}</td>
@@ -897,25 +1091,168 @@
     });
   }
 
+  // ---- ✨ SHINY e P5 (13/11/2026): uma tela só para os raros, de todas as espécies. SHINY = todo shiny, de qualquer
+  // potência. P5 = potência 5 que NÃO é shiny (o shiny P5 fica do lado dos shiny, porque o shiny muda muito o preço).
+  // Em cima, o que VENDEU na moeda e no período escolhidos; embaixo, o que está À VENDA agora (o app busca no
+  // Mercado quando a pessoa clica: main.js → pkmBuscarRaros), com o "Vale cerca de" e o "Compensa?" da tela do pokémon.
+  const ehRaro = { shiny: (shiny, pot) => !!shiny, p5: (shiny, pot) => !shiny && Number(pot) === 5 };
+  const NOME_RARO = { shiny: 'shiny', p5: 'P5' };
+  op.rrOrdV ??= null; // ordem da tabela de vendas: { col, dir }
+  op.rrOrdA ??= null; // e da tabela de anúncios
+  function detalheRaros() {
+    const det = $('det'), m = op.moeda, pe = periodo();
+    const tipo = ehRaro[op.tipo] ? op.tipo : 'shiny', eh = ehRaro[tipo];
+    det.dataset.vista = 'raros';
+    det.dataset.especie = '';
+    // O que vendeu: por pokémon
+    const vendas = D.vendas.filter(v => v[4] === m && !v[14] && noPeriodo(v, pe) && eh(v[7], v[8]));
+    const por = new Map();
+    for (const v of vendas) { let o = por.get(v[2]); if (!o) por.set(v[2], o = { esp: v[2], precos: [], ult: 0 }); o.precos.push(v[3]); o.ult = Math.max(o.ult, v[1]); }
+    const linhasV = [...por.values()].map(o => ({ esp: o.esp, n: o.precos.length, med: mediana(o.precos), min: Math.min(...o.precos), max: Math.max(...o.precos), ult: o.ult }));
+    const maisCara = vendas.reduce((a, v) => (!a || v[3] > a[3] ? v : a), null);
+    const mil = n => Number(n).toLocaleString('pt-BR'), s = n => (n === 1 ? '' : 's');
+    const R = D.raros, moedaR = m ? 'orb' : 'gold';
+    det.innerHTML = `<h1>${tipo === 'shiny' ? '✨ Resumo dos shiny' : 'Resumo dos P5'}</h1>
+      <p class="guia">${tipo === 'shiny' ? '<b>Shiny</b> é a versão rara (✨), de qualquer potência.' : '<b>P5</b> é o pokémon de potência 5, a mais alta, que não é shiny (o shiny P5 fica na aba Shiny).'} À esquerda, os pokémons com vendas de ${NOME_RARO[tipo]}: clique num deles para ver só os ${NOME_RARO[tipo]} dele. Os números seguem a moeda e o período escolhidos lá em cima.</p>
+      <div class="cards">
+        <div class="card"><span class="mut">Vendas de ${NOME_RARO[tipo]}</span><b>${mil(vendas.length)}</b><span class="mut">${pe.longo}, em ${moedaTxt(m)} · ${mil(linhasV.length)} pokémon${linhasV.length === 1 ? '' : 's'} diferente${s(linhasV.length)}</span></div>
+        <div class="card" title="Preço do meio (mediana): metade das vendas saiu por menos, metade por mais."><span class="mut">Quanto estão pagando</span><b>${fmt(mediana(vendas.map(v => v[3])))}</b><span class="mut">${vendas.length ? `preço do meio de todas as vendas de ${NOME_RARO[tipo]}` : 'sem vendas no período'}</span></div>
+        <div class="card"><span class="mut">Venda mais cara</span><b>${fmt(maisCara?.[3])}</b><span class="mut" id="rrCara"></span></div>
+      </div>
+      <h2>À venda agora <button id="buscarRaros" style="margin-left:8px;text-transform:none;letter-spacing:0" ${D.ocupado ? 'disabled' : ''}>${D.ocupado ? 'Buscando…' : R && R.moeda === moedaR ? '⟳ Buscar de novo' : 'Buscar agora'}</button></h2>
+      <div id="rrAnuncios"></div>`;
+    if (maisCara) $('rrCara').textContent = `${nome(maisCara[2])}, ${hora(maisCara[1])}`;
+    $('buscarRaros').onclick = () => { $('buscarRaros').disabled = true; $('buscarRaros').textContent = 'Buscando…'; api.pkRaros(moedaR); };
+    tabelaRarosAnuncios($('rrAnuncios'), tipo, m);
+  }
+  const abrirPokemon = esp => { op.sel = Number(esp); op.vista = 'especie'; op.aba = 'venda'; render(); };
+  // O tipo escolhido nas abas da lista: todos, só shiny (de qualquer potência) ou só P5 (sem shiny)
+  const tipoOk = (shiny, pot) => (op.tipo === 'shiny' || op.tipo === 'p5' ? ehRaro[op.tipo](shiny, pot) : true);
+  // Entra no "preço do meio": fora da aba Shiny, o shiny fica de fora (vale outra coisa)
+  const contaNoMeio = v => op.tipo === 'shiny' || !v[7];
+  // Tabela com títulos clicáveis: cols = [chave, título, valor, classe, dica]; padrao = [chave, sentido]
+  function cabecalho(cols, o, padrao) {
+    const atual = o ?? { col: padrao[0], dir: padrao[1] };
+    return '<tr>' + cols.map(([k, rot, , cls, dica]) => `<th class="ord ${cls || ''}${atual.col === k ? ' on' : ''}" data-col="${k}" title="${esc(dica || 'Ordenar por ' + rot)}">${rot}${atual.col === k ? (atual.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('') + '<th></th></tr>';
+  }
+  function ordenarPor(lin, cols, o, padrao) {
+    const atual = o ?? { col: padrao[0], dir: padrao[1] };
+    const get = cols.find(c => c[0] === atual.col)?.[2] ?? (() => 0);
+    return lin.sort((a, b) => {
+      const x = get(a), y = get(b);
+      if (x == null && y == null) return 0;
+      if (x == null) return 1; if (y == null) return -1; // vazio sempre no fim
+      return (typeof x === 'string' ? x.localeCompare(y) : x - y) * atual.dir;
+    });
+  }
+  const COLS_RV = [
+    ['especie', 'Pokémon', r => nome(r.esp).toLowerCase()], ['n', 'Vendas', r => r.n, 'r', 'Quantas vendas no período'],
+    ['med', 'Preço do meio', r => r.med, 'r', 'Metade das vendas saiu por menos, metade por mais'],
+    ['min', 'Mais barata', r => r.min, 'r'], ['max', 'Mais cara', r => r.max, 'r'], ['ult', 'Última venda', r => r.ult, 'r']
+  ];
+  function tabelaRarosVendas(host, lin, pe) {
+    if (!lin.length) { host.innerHTML = `<div class="mut">Nenhuma venda de ${NOME_RARO[op.raro]} em ${moedaTxt(op.moeda)} ${pe.longo}. Tente um período maior ou a outra moeda.</div>`; return; }
+    const padrao = ['n', -1];
+    // Só os 12 primeiros, para os anúncios (logo abaixo) ficarem à vista; o botão mostra todos
+    const vis = ordenarPor([...lin], COLS_RV, op.rrOrdV, padrao).slice(0, op.rrTodos ? 400 : 12);
+    let h = '<table class="an">' + cabecalho(COLS_RV, op.rrOrdV, padrao);
+    for (const r of vis) {
+      h += `<tr class="clic" data-esp="${r.esp}" title="Clique para abrir este pokémon"><td><span class="lnk">${icone(r.esp, 22)}<span class="nmx"></span></span></td><td class="r"><b>${r.n.toLocaleString('pt-BR')}</b></td>
+        <td class="r"><b>${fmt(r.med)}</b></td><td class="r">${fmt(r.min)}</td><td class="r">${fmt(r.max)}</td><td class="r">${hora(r.ult)}</td><td></td></tr>`;
+    }
+    host.innerHTML = h + '</table>' + (lin.length > 12 ? `<button id="rrMais" style="margin-top:6px">${op.rrTodos ? 'Mostrar só os 12 primeiros' : `Mostrar todos os ${lin.length} pokémons`}</button>` : '');
+    host.querySelector('#rrMais')?.addEventListener('click', () => { op.rrTodos = !op.rrTodos; tabelaRarosVendas(host, lin, pe); });
+    host.querySelectorAll('.nmx').forEach((e, i) => { e.textContent = nome(vis[i].esp); });
+    host.querySelectorAll('tr[data-esp]').forEach(tr => { tr.onclick = () => abrirPokemon(tr.dataset.esp); });
+    host.querySelectorAll('th.ord').forEach(th => {
+      th.onclick = () => {
+        const col = th.dataset.col, at = op.rrOrdV ?? { col: padrao[0], dir: padrao[1] };
+        op.rrOrdV = at.col === col ? { col, dir: -at.dir } : { col, dir: col === 'especie' ? 1 : -1 };
+        salvarOp();
+        tabelaRarosVendas(host, lin, pe);
+      };
+    });
+  }
+  const COLS_RA = [
+    ['especie', 'Pokémon', r => nome(r.esp).toLowerCase()], ['nota', 'Nota', r => r.l[3], 'r', 'A nota que o jogo dá ao pokémon, de 0 a 10'],
+    ['nivel', 'Nível', r => r.l[4], 'r'], ['potencia', 'Potência', r => r.l[6], 'r', 'Potência de nascimento, de P1 a P5'],
+    ['preco', 'Preço', r => r.l[1], 'r', 'O preço pedido no anúncio'],
+    ['vale', 'Vale cerca de', r => r.est, 'r', 'O preço do meio das vendas parecidas (mesmo pokémon, nota e nível próximos; shiny só com shiny) nos últimos 30 dias'],
+    ['desconto', 'Compensa?', r => r.desc, '', 'Compara o preço pedido com o "Vale cerca de". Verde = mais barato que o valor; vermelho = mais caro.'],
+    ['vendedor', 'Vendedor', r => String(r.l[7] || '').toLowerCase()]
+  ];
+  function tabelaRarosAnuncios(host, tipo, m) {
+    const R = D.raros, moedaR = m ? 'orb' : 'gold';
+    const aviso = D.aviso ? `<div class="mut" style="color:#ffb86b;margin-bottom:4px">⚠ ${esc(D.aviso)}</div>` : '';
+    if (!R || R.moeda !== moedaR) {
+      host.innerHTML = aviso + `<div class="mut">${D.ocupado ? 'Buscando…' : `Os anúncios de shiny e de P5 em ${moedaTxt(m)} ainda não foram buscados. Clique em "Buscar agora": o app pede ao Mercado, pela Conta 1, os mais baratos de cada tipo (até 6 pedidos).`}</div>`;
+      return;
+    }
+    const todas = R.linhas.filter(l => l[2] === m && l[15] && ehRaro[tipo](l[5], l[6]));
+    const lin = todas.map(l => {
+      const av = avaliar(l[15], m, { nota: l[3], nivel: l[4], shiny: l[5], potencia: l[6], tm: l[9] });
+      return { l, esp: l[15], est: av?.valor ?? null, n: av?.n ?? 0, desc: av ? (av.valor - l[1]) / av.valor * 100 : null };
+    });
+    const padrao = ['desconto', -1];
+    const vis = ordenarPor(lin, COLS_RA, op.rrOrdA, padrao).slice(0, 150);
+    const semBase = lin.filter(r => r.desc == null).length;
+    let h = aviso + `<div class="mut" style="margin-bottom:4px">Lido às ${hh(R.em)}${D.ocupado ? ' · <b>buscando de novo…</b>' : ''} · <b>${lin.length}</b> anúncio${lin.length === 1 ? '' : 's'} de ${NOME_RARO[tipo]} em ${moedaTxt(m)}, os mais baratos do Mercado${semBase ? ` · ${semBase} sem base (faltam vendas parecidas para comparar)` : ''}. Clique no pokémon para abrir a tela dele.</div>`;
+    h += '<table class="an">' + cabecalho(COLS_RA, op.rrOrdA, padrao);
+    for (const r of vis) {
+      const l = r.l, bom = r.desc != null && r.desc >= D.opcoes.alertaPct;
+      h += `<tr class="${bom ? 'fogo' : ''}"><td><span class="lnk" data-esp="${r.esp}">${icone(r.esp, 22, !!r.l[5])}<span class="nmx"></span></span></td>
+        <td class="r">${l[5] ? '✨ ' : ''}${l[3] != null ? 'N' + Number(l[3]).toFixed(2).replace('.', ',') : '—'}${zBadge(l)}</td>
+        <td class="r">${l[4] != null ? Number(l[4]).toLocaleString('pt-BR') : ''}</td><td class="r">${l[6] != null ? 'P' + l[6] : ''}</td>
+        <td class="r"><b>${fmt(l[1])}</b></td><td class="r" title="${r.n ? 'preço do meio de ' + r.n + ' vendas parecidas' : 'sem vendas parecidas o bastante'}">${fmt(r.est)}</td>
+        <td>${compensa(r.desc, bom)}</td><td class="vend"></td>
+        <td><button class="abrir" data-id="${l[0]}" title="Abre este anúncio no jogo, na Conta 1">Abrir no jogo</button></td></tr>`;
+    }
+    host.innerHTML = h + '</table>' + (lin.length ? '' : `<div class="mut">Nenhum anúncio de ${NOME_RARO[tipo]} em ${moedaTxt(m)} na última busca.</div>`);
+    host.querySelectorAll('.nmx').forEach((e, i) => { e.textContent = nome(vis[i].esp); });
+    host.querySelectorAll('td.vend').forEach((td, i) => { td.textContent = vis[i].l[7] + (vis[i].l[8] > Date.now() ? ' 🔒' : ''); if (vis[i].l[8] > Date.now()) td.title = 'Retido até ' + hora(vis[i].l[8]); });
+    host.querySelectorAll('.lnk').forEach(e => { e.onclick = () => abrirPokemon(e.dataset.esp); });
+    host.querySelectorAll('button.abrir').forEach(b => { b.onclick = () => api.pkAbrirAnuncio(Number(b.dataset.id)); });
+    host.querySelectorAll('th.ord').forEach(th => {
+      th.onclick = () => {
+        const col = th.dataset.col, at = op.rrOrdA ?? { col: padrao[0], dir: padrao[1] };
+        op.rrOrdA = at.col === col ? { col, dir: -at.dir } : { col, dir: ['especie', 'vendedor', 'preco'].includes(col) ? 1 : -1 };
+        salvarOp();
+        tabelaRarosAnuncios(host, tipo, m);
+      };
+    });
+  }
   function alertas() {
-    const box = $('alertas');
-    const al = (D?.alertas ?? []).slice().reverse();
-    box.innerHTML = `<h2>🔔 Pechinchas avisadas (${al.length})</h2>`;
-    if (!al.length) { box.insertAdjacentHTML('beforeend', `<div class="mut">Nenhuma ainda. Marque espécies com ★: o app avalia os anúncios delas e avisa os que estão ${D?.opcoes?.alertaPct ?? 30}% ou mais abaixo do valor pela nota.</div>`); return; }
+    const box = $('alertas'), sino = $('sino');
+    const todos = (D?.alertas ?? []).slice().reverse();
+    const novos = todos.filter(a => Date.now() - a.em < 864e5);
+    sino.textContent = `🔔 Pechinchas${novos.length ? ` (${novos.length})` : ''}`;
+    sino.classList.toggle('novo', novos.length > 0 && !op.alertasAberto);
+    sino.classList.toggle('on', !!op.alertasAberto);
+    box.classList.toggle('aberto', !!op.alertasAberto);
+    if (!op.alertasAberto) return;
+    const al = op.alertasAntigas ? todos : novos;
+    box.innerHTML = `<h2>🔔 Pechinchas ${op.alertasAntigas ? 'avisadas' : 'das últimas 24 h'} (${al.length})</h2>`;
+    if (!al.length) box.insertAdjacentHTML('beforeend', `<div class="mut">Nenhuma ${todos.length ? 'nas últimas 24 h' : 'ainda'}. Marque pokémons com ★: o app confere os anúncios deles e avisa os que estão ${D?.opcoes?.alertaPct ?? 30}% ou mais abaixo do valor.</div>`);
     for (const a of al.slice(0, 50)) {
       const d = document.createElement('div');
       d.className = 'al';
       d.innerHTML = `<span class="q">${hora(a.em)}</span><span class="t"></span>`;
       d.innerHTML += `<span class="sp"></span><button class="abrir">Abrir no jogo</button>`;
-      d.querySelector('.t').textContent = `${nome(a.especie)} N${(a.nota ?? 0).toFixed(2)} Nv ${a.nivel} — ${fmt(a.preco)} ${moedaTxt(a.moeda)} (vale ~${fmt(a.estimado)}, −${a.desconto}%) · ${a.vendedor}`;
+      d.querySelector('.t').textContent = `${nome(a.especie)}, nota ${(a.nota ?? 0).toFixed(2).replace('.', ',')}, nível ${a.nivel}: ${fmt(a.preco)} ${moedaTxt(a.moeda)} (vale cerca de ${fmt(a.estimado)}, ${a.desconto}% mais barato) · ${a.vendedor}`;
       d.onclick = e => {
         if (e.target.classList.contains('abrir')) return api.pkAbrirAnuncio(a.anuncio);
-        op.sel = a.especie; op.moeda = a.moeda; op.vista = 'especie'; render();
+        op.sel = a.especie; op.moeda = a.moeda; op.vista = 'especie'; op.aba = 'venda'; op.tipo = 'todos'; render();
       };
       box.appendChild(d);
     }
+    if (todos.length > novos.length) {
+      const b = document.createElement('button');
+      b.style.marginTop = '6px';
+      b.textContent = op.alertasAntigas ? 'Esconder as antigas' : `Ver também as ${todos.length - novos.length} antigas`;
+      b.onclick = () => { op.alertasAntigas = !op.alertasAntigas; salvarOp(); alertas(); };
+      box.appendChild(b);
+    }
   }
-
   function dicas(host) {
     const tip = $('tip');
     for (const c of host.querySelectorAll('[data-tip]')) {
@@ -925,7 +1262,11 @@
     }
   }
 
-  for (const g of ['moeda', 'ordem']) for (const b of $(g).children) b.onclick = () => { op[g] = g === 'moeda' ? Number(b.dataset.v) : b.dataset.v; render(); };
+  for (const b of $('moeda').children) b.onclick = () => { op.moeda = Number(b.dataset.v); render(); };
+  $('sino').onclick = () => { op.alertasAberto = !op.alertasAberto; salvarOp(); alertas(); };
+  $('ajudaBtn').onclick = () => { const a = $('ajuda').classList.toggle('aberto'); $('ajudaBtn').classList.toggle('on', a); };
+  // Na primeira vez que a tela nova abre, a explicação já vem à vista
+  try { if (!localStorage.getItem('pk-ajuda-vista')) { localStorage.setItem('pk-ajuda-vista', '1'); $('ajudaBtn').onclick(); } } catch {}
   for (const b of $('periodo').children) b.onclick = () => escolherPeriodo(b.dataset.v);
   $('dia').onchange = () => escolherPeriodo($('dia').value || '24h');
   $('diaAnt').onclick = () => escolherPeriodo(ehDia(op.periodo) ? outroDia(op.periodo, -1) : diaDe(Date.now()));
@@ -936,15 +1277,24 @@
   $('agora').onclick = () => api.pkAgora();
   $('precificar').onclick = () => api.prAbrir();
   $('verAtq').onclick = () => { op.vista = op.vista === 'atacantes' ? 'especie' : 'atacantes'; render(); };
+  for (const b of $('tipos').children) b.onclick = () => {
+    op.tipo = b.dataset.v;
+    op.vista = op.tipo === 'todos' ? 'especie' : 'raros';
+    salvarOp();
+    render();
+  };
   for (const k of ['vendasMin', 'gradeMin', 'avaliarMin', 'alertaPct', 'minVendas']) $('o-' + k).onchange = () => api.pkOpcoes({ [k]: Number($('o-' + k).value) });
   $('o-alertas').onchange = () => api.pkOpcoes({ alertas: $('o-alertas').checked });
   window.onresize = () => D && detalhe();
   api.onPkState(s => {
     D = s;
-    if (s.foco?.especie) { op.sel = Number(s.foco.especie); op.vista = 'especie'; }
+    // A resposta de um pedido de anúncios não tira a pessoa da tela de raros ou de atacantes (ela pode ter trocado de tela enquanto o pedido ia)
+    if (s.foco?.especie && !(s.foco.resposta && (op.vista === 'raros' || op.vista === 'atacantes'))) { op.sel = Number(s.foco.especie); op.vista = 'especie'; if (!s.foco.resposta) { op.aba = 'venda'; op.tipo = 'todos'; } }
     render();
   });
   // Golpes e ícones das espécies: chegam ao abrir a janela e de novo quando o app remonta os dados do jogo
+  // Chegaram retratos de shiny novos: redesenha (a lista e a tela à direita usam)
+  api.onPkShiny?.(d => { SH = d || { looks: {}, img: {} }; if (D) render(); });
   api.onPkJogo(d => {
     J = d?.especies ? d : null;
     perfis.clear();

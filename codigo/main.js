@@ -34,6 +34,18 @@ const appLog = msg => {
     fs.appendFileSync(f, `${new Date().toLocaleString('pt-BR')}  ${msg}\n`);
   } catch {}
 };
+// Os outros registros (sniper.log, reposicao.log) também não crescem sem fim: passou de 5 MB, fica só o último 1 MB
+function registroComLimite(f, max = 5 * 1024 * 1024, fica = 1024 * 1024) {
+  try {
+    const tam = fs.statSync(f).size;
+    if (tam <= max) return;
+    const fd = fs.openSync(f, 'r');
+    const buf = Buffer.alloc(fica);
+    try { fs.readSync(fd, buf, 0, fica, tam - fica); } finally { fs.closeSync(fd); }
+    const corte = buf.indexOf(10); // começa numa linha inteira
+    fs.writeFileSync(f, buf.subarray(corte + 1));
+  } catch {}
+}
 process.on('uncaughtException', err => appLog(`ERRO não tratado: ${err?.stack || err}`));
 process.on('unhandledRejection', err => appLog(`ERRO de promessa: ${err?.stack || err}`));
 app.on('child-process-gone', (_e, d) => appLog(`processo caiu: tipo=${d.type} motivo=${d.reason} código=${d.exitCode}${d.name ? ` (${d.name})` : ''}`));
@@ -361,6 +373,8 @@ const WS_ESCUTA = `(() => {
     constructor(...a) {
       super(...a);
       window.__pkmSock = this;
+      window.__pkmFechou = null;
+      this.addEventListener('close', ev => { if (window.__pkmSock === this) window.__pkmFechou = { em: Date.now(), code: ev.code }; });
       this.addEventListener('message', ev => {
         const d = ev.data;
         if (typeof d !== 'string') return;
@@ -398,6 +412,8 @@ const WS_ESCUTA = `(() => {
             window.__pkmCatItensP = null;
           }
           // As hunts e as regras do combate da entrada, e o estado inteiro remontado: a Melhor hunt (HUNT_ESCUTA)
+          // O looktype do shiny de cada espécie (o Monitor de Pokémons desenha o shiny com as cores dele)
+          if (m.t === 'welcome' && m.shinyLooks) window.__pkmShinyLooks = { looks: m.shinyLooks || {}, outland: m.shinyLooksOutland || {} };
           if (m.t === 'welcome') {
             window.__pkmHuntBase = { em: Date.now(), hunts: Array.isArray(m.hunts) ? m.hunts : [], tabelaTipos: m.tabelaTipos || {},
               tiposBoost: m.tiposBoost || [], amp: m.ampliacaoHunt ?? 1.5, multHp: m.multHpSelvagem ?? 5, multDano: m.multDanoSelvagem ?? 1.8 };
@@ -635,6 +651,9 @@ const SNIPER_SCRIPT = `(() => {
   const nomeAlvo = a => (ehPk(a) ? (a.nome || 'Qualquer pokémon') : nome(a.itemId));
   const moedaTxt = m => (m === 'gold' ? 'coins' : 'gemas');
   const reg = txt => { S.log.push({ em: Date.now(), txt }); if (S.log.length > 300) S.log.splice(0, S.log.length - 300); };
+  // O mesmo anúncio (mesmo preço e quantidade) entra no registro uma vez só a cada 6 h. Em 12/11/2026 a simulação
+  // regravou "compraria" a cada 20 s para cada anúncio: 116 mil linhas num dia, e o sniper.log chegou a 34 MB.
+  const regUmaVez = (marca, txt) => { const a = (S.avisados ??= {}); if (a[marca]) return; a[marca] = Date.now(); reg(txt); };
   fetch('/assets/items.json').then(r => r.json()).then(j => { for (const i of (j.items || j)) S.nomes[i.id] = i.name; }).catch(() => {});
   import('/i18n.mjs').then(m => {
     const chaves = new Map();
@@ -692,6 +711,7 @@ const SNIPER_SCRIPT = `(() => {
     } else S.pausadoMercado = false;
     // Anúncio tentado há mais de 20 s já pode ser tentado de novo: não precisa mais da marca
     for (const id in S.tentados) if (Date.now() - S.tentados[id] > 20000) delete S.tentados[id];
+    if (S.avisados) for (const k in S.avisados) if (Date.now() - S.avisados[k] > 6 * 3600e3) delete S.avisados[k];
     relogio = setTimeout(rodar, Math.max(4000, passo));
   }
 
@@ -776,7 +796,7 @@ const SNIPER_SCRIPT = `(() => {
     if (espera > 0) {
       // Retido: pede 300 ms depois de liberar, dentro dos 3 s do sorteio (com o alvo como estiver na hora)
       S.agendados[id] = { t: setTimeout(() => { const x = S.agendados[id]; delete S.agendados[id]; if (x) pedir(x.alvo, l, q); }, espera + 300), alvo, l };
-      reg('agendado: ' + descrever(alvo, l, q) + ', libera em ' + Math.ceil(espera / 1000) + ' s');
+      regUmaVez('ag|' + id + '|' + l.preco + '|' + q, 'agendado: ' + descrever(alvo, l, q) + ', libera em ' + Math.ceil(espera / 1000) + ' s');
     } else pedir(alvo, l, q);
   }
 
@@ -785,7 +805,7 @@ const SNIPER_SCRIPT = `(() => {
     if (!(q > 0) || !alvo.ativo) return;
     S.tentados[l.id] = Date.now();
     const desc = descrever(alvo, l, q);
-    if (S.cfg.simular) { reg('[simulação] compraria ' + desc); return; }
+    if (S.cfg.simular) { regUmaVez('si|' + l.id + '|' + l.preco + '|' + q, '[simulação] compraria ' + desc); return; }
     const ok = window.__pkmEnviar?.({ t: 'market.comprar', id: l.id, qtd: q, preco: l.preco, moeda: alvo.moeda, sorteioUi: 1 });
     if (!ok) { reg('sem conexão com o jogo, não pedi ' + desc); return; }
     S.pendentes[l.id] = { alvo, qtd: q, em: Date.now(), desc };
@@ -950,6 +970,7 @@ async function sniperLer() {
   if (mudou) saveCfg();
   if (registro.length) {
     registro.sort((a, b) => a.em - b.em);
+    registroComLimite(path.join(app.getPath('userData'), 'sniper.log'));
     try { fs.appendFileSync(path.join(app.getPath('userData'), 'sniper.log'), registro.map(l => `${new Date(l.em).toLocaleString('pt-BR')}  ${l.txt}`).join('\n') + '\n'); } catch {}
   }
   sniperEscolherOlheiro(sts);
@@ -1073,6 +1094,7 @@ function repLog(i, txt) {
   const l = { em: Date.now(), conta: i, txt };
   repLogs.push(l);
   if (repLogs.length > 200) repLogs.splice(0, repLogs.length - 200);
+  registroComLimite(path.join(app.getPath('userData'), 'reposicao.log'));
   try { fs.appendFileSync(path.join(app.getPath('userData'), 'reposicao.log'), `${new Date(l.em).toLocaleString('pt-BR')}  ${cfg.names[i]}: ${txt}\n`); } catch {}
 }
 
@@ -2094,6 +2116,32 @@ async function pkmBuscarAtacantes(moeda, filtros) {
   return '';
 }
 
+// ✨ SHINY e P5 de todas as espécies (13/11/2026): os anúncios só de shiny e os só de potência 5, os mais baratos
+// primeiro, 3 páginas de cada. São até 6 pedidos, 1,2 s entre eles, e só quando a pessoa clica. Quem separa e
+// avalia cada um é a janela (pokemons.html).
+async function pkmBuscarRaros(moeda) {
+  const p = pkmLer();
+  const linhas = new Map();
+  for (const filtro of [{ shiny: 'so' }, { potenciaMin: 5, potenciaMax: 5 }]) {
+    const fs_ = pkmFiltrosServidor(filtro);
+    for (let pg = 0; pg < 3; pg++) {
+      if (await pkmMercadoAberto()) return 'adiada (mercado aberto)';
+      const r = await pkmPedir({ t: 'market.listar', tipo: 'pokemon', moeda, busca: '', ordem: 'baratos', criterios: [], elementos: [], pagina: pg, especieId: 0, ...fs_ }, 'vitrine');
+      if (r?.erro && !linhas.size) return pkmErroDaConta(r.erro);
+      if (r?.erro) break;
+      for (const a of r.linhas || []) {
+        if (a.tipo !== 'pokemon' || !a.ficha) continue;
+        p.especies[a.ficha.speciesId] ??= a.ficha.nome;
+        linhas.set(a.id, linhaDoAnuncio(a));
+      }
+      if ((pg + 1) * 24 >= (Number(r.total) || 0)) break;
+      await espera(1200);
+    }
+  }
+  p.raros = { em: Date.now(), moeda, linhas: [...linhas.values()] };
+  return '';
+}
+
 // ---------- Dados do jogo: golpes, tipos e stats-base de cada espécie, e os ícones ----------
 // O catálogo de espécies é montado no CLIENTE do jogo, a partir de vários arquivos públicos e ajustes
 // (as planilhas de golpes, os golpes de 600, as megas…) — o creatures.json cru do Glaceon nem tem os
@@ -2184,7 +2232,7 @@ function pkmEnviar(foco) {
   const p = pkmLer(), o = pkmOpcoes();
   pkmWin.webContents.send('pkstate', {
     especies: p.especies, vendas: p.vendas.map(pkmCurta), contas: p.contas, buracos: p.buracos, gradeAtual: p.gradeAtual, gradeDia: p.gradeDia,
-    ofertas: p.ofertas, atacantes: p.atacantes ?? null, alertas: p.alertas, opcoes: o, ocupado: pkmOcupado, ult: pkmUlt, foco: foco ?? null,
+    ofertas: p.ofertas, atacantes: p.atacantes ?? null, raros: p.raros ?? null, alertas: p.alertas, opcoes: o, ocupado: pkmOcupado, ult: pkmUlt, foco: foco ?? null,
     aviso: pkmAviso, jogo: { em: jogoLer()?.em ?? 0, montando: jogoMontando }
   });
 }
@@ -2200,12 +2248,12 @@ function abrirPokemons(foco) {
   }
   pkmWin = new BrowserWindow({
     width: 1250, height: 830, parent: win, autoHideMenuBar: true, backgroundColor: '#151515',
-    title: 'Monitor de Pokémons do RMT',
+    title: 'Monitor de Pokémons',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true }
   });
   pkmWin.on('page-title-updated', e => e.preventDefault());
   pkmWin.loadFile(path.join(__dirname, 'pokemons.html'));
-  pkmWin.webContents.on('did-finish-load', () => { pkmJogoEnviar(); pkmEnviar(foco); });
+  pkmWin.webContents.on('did-finish-load', () => { pkmJogoEnviar(); pkmEnviar(foco); shinyEnviar(); });
   pkmWin.on('closed', () => { pkmWin = null; });
   if (!jogoLer()) jogoMontar();
 }
@@ -4308,6 +4356,8 @@ function createWindow() {
   setInterval(() => { if (sniperOutrasComAlvo()) sniperRepassar(); }, 5000);
   // Reposição (bolas, poções e revives): as contas ligadas conferem o estoque a cada 20 s (a cada 3 s enquanto compram)
   setInterval(repTick, 3000);
+  // 🛟 Vigia de conexão: a conta que cai é recarregada sozinha (ver vigiaTick)
+  setInterval(() => vigiaTick().catch(e => appLog(`vigia: erro (${e.message})`)), VIGIA_CADA_MS);
   // 🏦 Caixa do projeto: a carteira do jogo na rede Solana a cada 10 min (a cada 2 enquanto houver fila); o painel de
   // Gemas do jogo, pela Conta 1, de hora em hora
   caixaAgendar(CAIXA_TESTE ? 3000 : 45000);
@@ -4327,6 +4377,73 @@ function createWindow() {
     setInterval(twListaVigiar, 60000);
   }, 2 * 60 * 1000);
   setInterval(() => twBauConferir().catch(() => {}), TW_BAU_MS);
+}
+
+// ---------- 🛟 Vigia de conexão: a conta que perde a conexão com o jogo é recarregada sozinha ----------
+// Em 08/11 e 11/11/2026 a Conta 1 ficou ~6 h sem conexão de madrugada (02h–08h51 e 05h–11h39) e só voltou quando
+// alguém recarregou. Agora, a cada minuto, cada conta diz se o WebSocket do jogo está aberto. A conta que JÁ esteve
+// conectada nesta abertura do app e fica 3 min sem conexão é recarregada; se não voltar, de novo depois de 3, 10 e
+// 30 min e, daí em diante, de hora em hora. Não mexe: na conta que nunca conectou (tela de login), sem internet no PC,
+// e quando o jogo fechou a conexão com o código 4001 (a conta entrou em outro lugar: recarregar derrubaria quem
+// entrou, e os dois ficariam se derrubando). Avisa pelo Windows quando a 1ª recarga não resolve e quando a conta volta.
+// Desliga com "vigia": { "ligado": false } no config.json.
+const VIGIA_TESTE = process.env.PKM_VIGIA_TESTE === '1'; // o teste isolado encurta as esperas
+const VIGIA_CADA_MS = VIGIA_TESTE ? 300 : 60000;
+const VIGIA_FORA_MS = VIGIA_TESTE ? 1500 : 3 * 60000;
+const VIGIA_ESPERAS_MS = VIGIA_TESTE ? [1500, 3000, 6000] : [3 * 60000, 10 * 60000, 30 * 60000, 60 * 60000];
+const VIGIA_LOGIN_EXTERNO = 4001;
+const vigiaNovo = () => ({ jaConectou: false, foraDesde: 0, tentativas: 0, proxima: 0, avisou: false, externo: false });
+const vigia = Array.from({ length: TOTAL }, vigiaNovo);
+function vigiaAvisar(i, corpo) {
+  if (!Notification.isSupported()) return;
+  const n = new Notification({ title: `PokeMulti: ${cfg.names[i]}`, body: corpo });
+  n.on('click', () => { if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.focus(); select(i); } });
+  n.show();
+}
+let vigiaOcupado = false;
+async function vigiaTick() {
+  if (vigiaOcupado || cfg.vigia?.ligado === false || !net.isOnline()) return;
+  vigiaOcupado = true;
+  try {
+    for (let i = 0; i < TOTAL; i++) {
+      const wc = views[i]?.webContents, v = vigia[i];
+      if (!wc || wc.isDestroyed() || wc.isLoading()) continue;
+      let r = null;
+      try {
+        r = await Promise.race([
+          wc.executeJavaScript('window.__pkmWs ? { con: window.__pkmSock?.readyState === 1, code: window.__pkmFechou?.code ?? 0 } : null'),
+          new Promise(res => setTimeout(res, 5000, null))
+        ]);
+      } catch {}
+      if (!r) continue; // página sem a escuta ou que não respondeu: não dá para saber
+      const agora = Date.now(), min = () => Math.max(1, Math.round((agora - v.foraDesde) / 60000));
+      if (r.con) {
+        if (v.tentativas || v.externo) appLog(`vigia: ${cfg.names[i]} voltou a conectar depois de ${min()} min${v.tentativas ? ` (${v.tentativas} recarga(s))` : ''}`);
+        if (v.avisou) vigiaAvisar(i, `Voltou a conectar depois de ${min()} min.`);
+        Object.assign(v, vigiaNovo(), { jaConectou: true });
+        continue;
+      }
+      if (!v.jaConectou) continue;
+      if (!v.foraDesde) { v.foraDesde = agora; continue; }
+      if (r.code === VIGIA_LOGIN_EXTERNO) {
+        if (!v.externo) {
+          v.externo = true;
+          appLog(`vigia: ${cfg.names[i]} saiu porque a conta entrou em outro lugar (código 4001); não recarrego`);
+          vigiaAvisar(i, 'Esta conta entrou em outro lugar e saiu daqui. Para voltar a jogar aqui, recarregue a conta.');
+        }
+        continue;
+      }
+      if (agora - v.foraDesde < VIGIA_FORA_MS || agora < v.proxima) continue;
+      v.tentativas++;
+      v.proxima = agora + VIGIA_ESPERAS_MS[Math.min(v.tentativas, VIGIA_ESPERAS_MS.length) - 1];
+      appLog(`vigia: ${cfg.names[i]} sem conexão com o jogo há ${min()} min${r.code ? ` (código ${r.code})` : ''}; recarreguei (tentativa ${v.tentativas})`);
+      if (v.tentativas === 2 && !v.avisou) {
+        v.avisou = true;
+        vigiaAvisar(i, `Sem conexão com o jogo há ${min()} min. Já recarreguei uma vez e não voltou; continuo tentando.`);
+      }
+      wc.reload();
+    }
+  } finally { vigiaOcupado = false; }
 }
 
 function flushAll() {
@@ -4468,22 +4585,92 @@ ipcMain.on('pk:atacantes', (_e, moeda, filtros) => {
   pkmPendente = { atacantes: true, moeda: moeda === 'gold' ? 'gold' : 'orb', filtros };
   pkmRodarPendente();
 });
+// ✨ Shiny e P5 de todas as espécies, na moeda da janela
+ipcMain.on('pk:raros', (_e, moeda) => {
+  pkmPendente = { raros: true, moeda: moeda === 'gold' ? 'gold' : 'orb' };
+  pkmRodarPendente();
+});
+// ---------- ✨ Retratos de SHINY (13/11/2026): as cores de shiny nos ícones do Monitor de Pokémons ----------
+// Cada desenho do jogo é um arquivo à parte (o índice tem 6 mil), então nada de baixar todos: a janela pede só os
+// pokémons que mostra como shiny, e cada retrato fica guardado para sempre em jogo-shiny.json (o desenho de um
+// looktype não muda). Até 60 por vez, um a cada 150 ms, numa janela escondida no robots.txt do jogo (shiny-jogo.js).
+// Qual looktype é o shiny de cada espécie vem do servidor, na entrada de uma conta (WS_ESCUTA → __pkmShinyLooks).
+const shinyPath = () => path.join(app.getPath('userData'), 'jogo-shiny.json');
+let shinyDados = null;
+function shinyLer() {
+  if (shinyDados) return shinyDados;
+  try { shinyDados = JSON.parse(fs.readFileSync(shinyPath(), 'utf8')); } catch {}
+  if (shinyDados?.v !== 1) shinyDados = { v: 1, looks: {}, img: {} };
+  return shinyDados;
+}
+const shinyFila = new Set();
+let shinyRodando = false, shinyEspera = null;
+async function shinyLooksDoJogo() {
+  for (const v of views) {
+    const wc = v?.webContents;
+    if (!wc || wc.isDestroyed()) continue;
+    try { const r = await wc.executeJavaScript('window.__pkmShinyLooks || null'); if (r?.looks && Object.keys(r.looks).length) return r; } catch {}
+  }
+  return null;
+}
+function shinyEnviar() {
+  if (!pkmWin || pkmWin.isDestroyed()) return;
+  const d = shinyLer();
+  pkmWin.webContents.send('pkshiny', { looks: d.looks, img: d.img });
+}
+function shinyPedir(ids) {
+  const d = shinyLer();
+  for (const id of ids) { const n = Number(id); if (n > 0 && !(n in d.looks)) shinyFila.add(n); }
+  shinyEnviar();
+  shinyRodar();
+}
+async function shinyRodar() {
+  if (shinyRodando || shinyEspera || !shinyFila.size) return;
+  shinyRodando = true;
+  let w = null, proxima = 0;
+  try {
+    const SL = await shinyLooksDoJogo();
+    if (!SL) { proxima = 60000; return; } // nenhuma conta entrou no jogo ainda: tenta de novo daqui a 1 min
+    const d = shinyLer(), ids = [...shinyFila].slice(0, 60);
+    w = new BrowserWindow({ show: false, webPreferences: { partition: 'persist:dados-jogo', sandbox: true, contextIsolation: true } });
+    await w.loadURL('https://pokeidle.io/robots.txt');
+    await w.webContents.executeJavaScript(`window.__pkmShiny = ${JSON.stringify({ SL, ids, ja: Object.keys(d.img) })}; true`);
+    const r = await w.webContents.executeJavaScript(fs.readFileSync(path.join(__dirname, 'shiny-jogo.js'), 'utf8'));
+    Object.assign(d.looks, r.looks);
+    Object.assign(d.img, r.img);
+    for (const id of ids) shinyFila.delete(id);
+    fs.writeFileSync(shinyPath(), JSON.stringify(d));
+    const novos = Object.values(r.img).filter(Boolean).length;
+    if (novos) appLog(`retratos de shiny: ${novos} novos (${Object.values(d.img).filter(Boolean).length} guardados)`);
+    shinyEnviar();
+    proxima = 5000;
+  } catch (e) {
+    appLog(`retratos de shiny: erro (${e.message})`);
+    proxima = 120000;
+  } finally {
+    try { w?.destroy(); } catch {}
+    shinyRodando = false;
+    if (shinyFila.size && proxima) shinyEspera = setTimeout(() => { shinyEspera = null; shinyRodar(); }, proxima);
+  }
+}
+ipcMain.on('pk:shiny', (_e, ids) => shinyPedir(Array.isArray(ids) ? ids.slice(0, 3000) : []));
+
 ipcMain.on('pk:dadosJogo', () => jogoMontar(true));
 async function pkmRodarPendente() {
   if (pkmOcupado || !pkmPendente) return;
-  const { especie, filtros, atacantes, moeda } = pkmPendente;
+  const { especie, filtros, atacantes, raros, moeda } = pkmPendente;
   pkmPendente = null;
   pkmOcupado = true; pkmAviso = ''; pkmEnviar();
   try {
-    const r = atacantes ? await pkmBuscarAtacantes(moeda, filtros) : await pkmAvaliarObservadas([especie], filtros);
+    const r = raros ? await pkmBuscarRaros(moeda) : atacantes ? await pkmBuscarAtacantes(moeda, filtros) : await pkmAvaliarObservadas([especie], filtros);
     if (r) {
-      appLog(`pokémons: ${atacantes ? 'atacantes' : 'avaliação'} ${r}`);
+      appLog(`pokémons: ${raros ? 'shiny e P5' : atacantes ? 'atacantes' : 'avaliação'} ${r}`);
       pkmAviso = r.includes('mercado aberto') ? 'Feche o Mercado na Conta 1 para o app buscar os anúncios (a resposta trocaria a página que você está vendo).' : r;
     }
     pkmGravar();
   } finally {
     pkmOcupado = false;
-    pkmEnviar(atacantes ? null : { especie });
+    pkmEnviar(atacantes || raros ? null : { especie, resposta: true });
     pkmRodarPendente();
   }
 }
@@ -4563,6 +4750,7 @@ ipcMain.on('tabMenu', (_e, i) => {
 });
 ipcMain.on('clearSession', async (_e, i) => {
   await session.fromPartition(`persist:conta${i + 1}`).clearStorageData();
+  Object.assign(vigia[i], vigiaNovo());
   views[i].webContents.loadURL(GAME_URL);
 });
 
