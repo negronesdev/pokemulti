@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
 <title>Monitor de Preços do RMT</title>
 <style>
   :root { --bg:#151515; --box:#1f1f23; --linha:#2a2a30; --fg:#eee; --mut:#9a9a9a; --sobe:#3fb950; --desce:#f0544f; --gema:#e879f9; --coin:#f5c518; --med:#8ab4f8; --op:#22d3ee; --vend:#a78bfa; }
@@ -31,6 +31,8 @@
   .row:hover { background:#1c1c20; }
   .row.on { background:#2a2238; }
   .row .n { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* O ícone do item, como no jogo (pixel art: sem borrar); quem ainda não tem desenho guarda o lugar */
+  .iti { display:inline-block; vertical-align:middle; margin:-3px 7px -1px 0; image-rendering:pixelated; }
   .row .v, .row .p, .row .d { text-align:right; font-variant-numeric:tabular-nums; }
   .row .p { font-weight:700; }
   .sobe { color:var(--sobe); } .desce { color:var(--desce); } .igual { color:var(--mut); }
@@ -117,7 +119,15 @@
     for (const [lim, div, s] of [[1e12, 1e12, 'T'], [1e9, 1e9, 'B'], [1e6, 1e6, 'M'], [1e4, 1e3, 'K']]) if (a >= lim) return (v / div).toLocaleString('pt-BR', { maximumFractionDigits: v / div >= 100 ? 0 : 1 }) + s;
     return Math.round(v).toLocaleString('pt-BR');
   };
+  // `nome`: o do items.json, em inglês (é por ele que se reconhece stone). `rot`: o que a tela do jogo mostra
   const nome = id => dados?.nomes?.[id] || ('item ' + id);
+  const rot = id => dados?.rotulos?.[id] || nome(id);
+  const icone = (id, px) => {
+    const d = dados?.icones?.[id], el = document.createElement(d ? 'img' : 'span');
+    el.className = 'iti'; el.style.width = el.style.height = px + 'px';
+    if (d) { el.src = d; el.alt = ''; }
+    return el;
+  };
   const ehStone = id => /\bstone$/i.test(nome(id));
   const moedaTxt = m => (m === 'orb' ? 'gemas' : 'coins');
 
@@ -179,14 +189,14 @@
     let linhas = Object.keys(ultimo).map(id => {
       const s = serie(id);
       return { id, s, atual: s.length ? s[s.length - 1].v : null, pct: variacao(s), vm: vsMedia(ultimo[id]) };
-    }).filter(l => l.atual != null && (!busca || nome(l.id).toLowerCase().includes(busca))
+    }).filter(l => l.atual != null && (!busca || (rot(l.id) + ' ' + nome(l.id)).toLowerCase().includes(busca))
       // Pedido do usuário (23/10/2026): as stones só interessam em coins; em gemas ficam de fora
       && !(op.moeda === 'orb' && ehStone(l.id)));
     const por = { barato: l => l.vm, alta: l => -l.pct, queda: l => l.pct };
-    if (op.ordem === 'nome') linhas.sort((a, b) => nome(a.id).localeCompare(nome(b.id)));
+    if (op.ordem === 'nome') linhas.sort((a, b) => rot(a.id).localeCompare(rot(b.id)));
     else {
       const f = por[op.ordem];
-      linhas.sort((a, b) => (f(a) ?? Infinity) - (f(b) ?? Infinity) || nome(a.id).localeCompare(nome(b.id)));
+      linhas.sort((a, b) => (f(a) ?? Infinity) - (f(b) ?? Infinity) || rot(a.id).localeCompare(rot(b.id)));
     }
 
     lista.innerHTML = `<div class="row cab"><span>Item (${linhas.length})</span><span class="v">Agora</span><span class="d" title="Menor anúncio comparado à média de venda dos 7 dias">vs média</span><span class="p">Variação</span><span>Histórico</span></div>`;
@@ -198,7 +208,9 @@
       el.innerHTML = `<span class="n"></span><span class="v">${fmt(l.atual)}</span>
         <span class="d ${l.vm == null ? 'igual' : l.vm < 0 ? 'barato' : 'caro'}"><span class="${op_ ? 'fogo' : ''}">${l.vm == null ? '—' : (l.vm > 0 ? '+' : '') + Math.round(l.vm) + '%'}</span></span>
         <span class="p ${c}">${pctTxt(l.pct)}</span><span>${spark(l.s, c)}</span>`;
-      el.querySelector('.n').textContent = (op_ ? '🔥 ' : '') + nome(l.id);
+      const cn = el.querySelector('.n');
+      cn.append(icone(l.id, 22), (op_ ? '🔥 ' : '') + rot(l.id));
+      cn.title = rot(l.id) !== nome(l.id) ? `${rot(l.id)} (no catálogo do jogo: ${nome(l.id)})` : rot(l.id);
       el.onclick = () => { op.sel = l.id; render(); };
       lista.appendChild(el);
     }
@@ -216,7 +228,7 @@
       const d = document.createElement('div');
       d.className = 'al';
       d.innerHTML = `<span class="q">${hora(a.em)}</span><span class="t"></span>`;
-      d.querySelector('.t').textContent = `${nome(a.id)} — ${fmt(a.preco)} ${moedaTxt(a.moeda)} (média ${fmt(a.media)}, −${a.desconto}%) · ${a.anuncios} anúncios`;
+      d.querySelector('.t').textContent = `${rot(a.id)} — ${fmt(a.preco)} ${moedaTxt(a.moeda)} (média ${fmt(a.media)}, −${a.desconto}%) · ${a.anuncios} anúncios`;
       d.onclick = () => { op.sel = String(a.id); op.moeda = a.moeda; op.valor = 'min'; render(); };
       box.appendChild(d);
     }
@@ -244,7 +256,7 @@
       <div id="graf"></div>
       <div class="legenda"><span><i style="background:${op.moeda === 'orb' ? 'var(--gema)' : 'var(--coin)'}"></i>Menor anúncio</span><span><i style="background:var(--med)"></i>Média de venda 7d</span><span>em ${moedaTxt(op.moeda)}</span></div>
       <div class="reais" id="reais"></div>`;
-    det.querySelector('h1').textContent = nome(id);
+    det.querySelector('h1').replaceChildren(icone(id, 30), rot(id));
     reaisDesenhar(id);
     if (op.grafico === 'dia') { velas($('graf'), id); return; }
     const desde = Number(op.periodo) ? Date.now() - Number(op.periodo) * 864e5 : 0;

@@ -326,7 +326,9 @@
     proximidade: r => `Poucas vendas comparáveis: o peso das vendas parecidas (da cadeia de ${r.family} e de espécies dos mesmos tipos) equivale a só cerca de ${Math.max(1, Math.round(5 * r.confidenceParts.proximidade / Math.max(0.01, 1 - r.confidenceParts.proximidade)))} vendas.`,
     certeza: () => 'Muitas das vendas parecidas têm Adicional incerto: o jogo mostra o Z-Move e o AoE de hoje, não os da hora da venda.',
     consistencia: () => 'Os preços dessas vendas variam muito entre si.',
-    ampliacao: r => `Poucas vendas da cadeia de ${r.family}: boa parte do preço vem de outras espécies.`
+    ampliacao: r => `Poucas vendas da cadeia de ${r.family}: boa parte do preço vem de outras espécies.`,
+    // A faixa de preço (desde 14/11/2026): fora do piso do mercado, pokémons iguais saem por preços bem diferentes
+    faixa: () => 'Pokémons nesta faixa de preço variam muito de uma venda para outra: parte sai perto do preço mínimo do mercado e parte bem acima, mesmo com fichas parecidas.'
   };
   function desenharResultado(alvo, extra) {
     const host = $('res'), r = R;
@@ -352,11 +354,11 @@
       r.parts.map(p => `<tr><td>${esc(p.label)} (${p.quantity} × <input type="number" min="0" step="0.5" data-item="${p.id}" value="${p.unit ?? ''}" placeholder="?" title="Preço de cada fragmento. Apague para voltar à cotação do dia (${p.quote != null ? dec(p.quote, 1) : 'sem cotação'}).">)</td><td class="r">${p.total != null ? fmt(p.total) + ' gemas' : '<span class="aviso">sem cotação</span>'}</td></tr>`).join('') +
       `</table>` + (r.parts.length ? '<p class="mut peq">Você pode trocar o preço por unidade dos Adicionais: o cálculo usa a cotação do dia (a mediana do menor anúncio), que pode estar defasada.</p>' : '');
     // Confiança e o porquê
-    const c = r.confidence, pesos = S?.calib?.pronto ? S.calib.pesos : [-2.64, 0.66, 0.68, 1.53, 0.85], K = ['proximidade', 'certeza', 'consistencia', 'ampliacao'];
+    const c = r.confidence, pesos = S?.calib?.pronto ? S.calib.pesos : [-0.72, 0.38, -0.11, 1.32, 0.61, -0.91, -1.34, -0.66, -0.33], K = ['proximidade', 'certeza', 'consistencia', 'ampliacao'];
     h += `<div class="conf"><b>Confiança ${c.percent}%</b><div class="barra"><i style="width:${c.percent}%"></i></div></div>
       <div class="mut peq">Em vendas como esta, cerca de ${c.percent} em cada 100 costumam sair a até 25% do Preço justo.</div>`;
     if (c.percent < 90) {
-      const perdas = K.map((k, i) => ({ k, loss: pesos[i + 1] * (1 - r.confidenceParts[k]) })).filter(x => x.loss > 0.15).sort((a, b) => b.loss - a.loss).slice(0, 3);
+      const perdas = [...K.map((k, i) => ({ k, loss: pesos[i + 1] * (1 - r.confidenceParts[k]) })), { k: 'faixa', loss: -(c.pesoFaixa || 0) }].filter(x => x.loss > 0.15).sort((a, b) => b.loss - a.loss).slice(0, 3);
       if (perdas.length) h += `<div class="bloco"><h3>Por que a confiança não é maior</h3><ul>${perdas.map(x => `<li>${esc(RAZOES[x.k](r))}</li>`).join('')}</ul></div>`;
     }
     // Como chegamos ao preço: a média das vendas da cadeia que mais pesaram

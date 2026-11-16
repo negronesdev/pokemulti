@@ -17,7 +17,12 @@
 //  - Os quartis dessas diferenças, em volta da curva no ponto do pokémon, dão os três preços. Os ADICIONAIS
 //    (Z-Move, AoE e Mega: 10 fragmentos cada) saem de cada venda pelo preço do dia dela e voltam no fim pelo de hoje.
 //  - A CONFIANÇA é a chance de a venda sair a até 25% do Preço justo, com pesos aprendidos nas vendas recentes
-//    (calibrar, abaixo, refaz o teste do precificador com as nossas vendas).
+//    (calibrar, abaixo, refaz o teste do precificador com as nossas vendas). Desde 14/11/2026 ela conta também a
+//    FAIXA DE PREÇO (CONFIDENCE.faixas): no teste com 9 mil vendas de 14 dias, perto do piso do mercado (até 12
+//    gemas) o Preço justo acertava bem mais do que a confiança dizia, e de 20 a 2.000 gemas bem menos (dizia 42%,
+//    acertava 28%), porque ali parte vende no piso e parte pelo valor. Com a faixa, o erro da confiança nesse miolo
+//    caiu de 10,6 para 3,3 pontos (5 janelas seguidas, aprendendo antes e conferindo depois). O PREÇO não mudou:
+//    8 ajustes de parâmetros e 5 estimadores diferentes não passaram do que já estava (o ruído é do mercado).
 
 const DIA = 864e5, FUSO_SP = -3 * 3600e3, LIDA_TARDE = 2 * 3600e3;
 const STATS = ['hp', 'atk', 'def', 'spAtk', 'spDef', 'speed'];
@@ -30,7 +35,11 @@ const diaDe = at => new Date(at + FUSO_SP).toISOString().slice(0, 10);
 const LEVEL_BAND = 0.5, MIN_MARKET = 30, ITEM_DAYS = 3, FAR_ITEM_DAYS = 5;
 const NEIGHBORS = { layers: [1, 0.2, 0.05, 0.01], levelSigma: 1.5, pveSigma: 0.15, notaSigma: 0.3, halfLifeDays: 14, minWeight: 1e-5,
   bias: Math.log(1.09), refinedWeight: 1, uncertainPlain: 1 };
-const CONFIDENCE = { weights: [-2.64, 0.66, 0.68, 1.53, 0.85], keys: ['proximidade', 'certeza', 'consistencia', 'ampliacao'] };
+// Pesos: [constante, as 4 notas, e um por faixa de preço acima da 1ª]. Os de fábrica saíram de 9 mil vendas (31/10 a 14/11/2026).
+const CONFIDENCE = { weights: [-0.72, 0.38, -0.11, 1.32, 0.61, -0.91, -1.34, -0.66, -0.33], keys: ['proximidade', 'certeza', 'consistencia', 'ampliacao'],
+  faixas: [12, 20, 150, 2000] };
+// Em que faixa de preço (em gemas) o Preço justo cai: 0 = até 12 (o piso), 1 = até 20, 2 = até 150, 3 = até 2.000, 4 = acima
+const faixaDe = preco => { let i = 0; while (i < CONFIDENCE.faixas.length && preco > CONFIDENCE.faixas[i]) i++; return i; };
 const LEVEL_STEPS = [20, 40, 60, 80, 100, 150, 200, 300, 500, 700, 1000, 1500, 2000, 3000, 5000, 10000];
 const CAP_LADDER = { 1: [100], 2: [40, 100], 3: [20, 40, 100], 4: [20, 40, 70, 100] };
 
@@ -349,10 +358,13 @@ function weightedQuantiles(points, qs) {
   }
   return out;
 }
-function confidence(parts, weights = CONFIDENCE.weights) {
-  const x = CONFIDENCE.keys.map(k => parts[k]), z = weights[0] + x.reduce((s, v, i) => s + weights[i + 1] * v, 0), chance = 1 / (1 + Math.exp(-z));
+// `preco`: o Preço justo (com os Adicionais). Pesos antigos, só com as 4 notas, continuam valendo (a faixa conta 0).
+function confidence(parts, weights = CONFIDENCE.weights, preco = null) {
+  const x = CONFIDENCE.keys.map(k => parts[k]), nk = CONFIDENCE.keys.length;
+  const faixa = Number.isFinite(preco) && preco > 0 ? faixaDe(preco) : 0, pesoFaixa = faixa ? Number(weights[nk + faixa]) || 0 : 0;
+  const z = weights[0] + x.reduce((s, v, i) => s + weights[i + 1] * v, 0) + pesoFaixa, chance = 1 / (1 + Math.exp(-z));
   const lowest = CONFIDENCE.keys.map((k, i) => ({ k, loss: weights[i + 1] * (1 - x[i]) })).sort((a, b) => b.loss - a.loss)[0].k;
-  return { chance, percent: Math.min(90, Math.max(10, Math.round(chance * 10) * 10)), lowest };
+  return { chance, percent: Math.min(90, Math.max(10, Math.round(chance * 10) * 10)), lowest, faixa, pesoFaixa };
 }
 function influence(pts, W) {
   const by = new Map();
@@ -399,7 +411,7 @@ function neighbors(target, rows, { addons = 0, typesOf = () => [], megaUnit = ()
   let familyCount = 0, uFam = 0, uMkt = 0;
   for (const r of same) { if (r.family === target.family) { familyCount++; if (r.uncertain) uFam++; } if (r.uncertain) uMkt++; }
   return { low: price(center + lo), median: price(center), high: price(center + hi), rawMedian: price(center + bias), base: Math.exp(center), addons,
-    weight: parts.ampliacao, familyCount, marketCount: same.length, parts, confidence: confidence(parts, weights), influence: influence(pts, W),
+    weight: parts.ampliacao, familyCount, marketCount: same.length, parts, confidence: confidence(parts, weights, price(center)), influence: influence(pts, W),
     uncertain: { family: uFam, market: uMkt } };
 }
 
@@ -513,18 +525,21 @@ function resumo(teste) {
   return { vendas: n, dentroDaFaixa: dentro / n, abaixo: abaixo / n, acima: acima / n, ate25: ate25 / n, erroMediano: Math.round(mediana(erros) * 10) / 10,
     vies: Math.exp(mediana(logs)) - 1 };
 }
-// Regressão logística simples (gradiente, com um pouco de regularização): acerto a até 25% ~ as quatro notas
+// Regressão logística simples (gradiente, com um pouco de regularização): acerto a até 25% ~ as quatro notas + a faixa
+// de preço do Preço justo (uma coluna de 0 ou 1 por faixa acima da primeira)
 function ajustarPesos(teste, inicio = CONFIDENCE.weights) {
-  const X = teste.map(t => CONFIDENCE.keys.map(k => t.parts[k])), y = teste.map(t => (Math.abs(t.price / t.median - 1) <= 0.25 ? 1 : 0));
+  const nk = CONFIDENCE.keys.length, nf = CONFIDENCE.faixas.length;
+  const X = teste.map(t => { const x = CONFIDENCE.keys.map(k => t.parts[k]), f = faixaDe(t.median); for (let j = 1; j <= nf; j++) x.push(f === j ? 1 : 0); return x; });
+  const y = teste.map(t => (Math.abs(t.price / t.median - 1) <= 0.25 ? 1 : 0));
   if (X.length < 200) return null;
-  let w = [...inicio];
+  let w = Array.from({ length: 1 + nk + nf }, (_, j) => Number(inicio[j]) || 0);
   const lr = 0.5, l2 = 1e-3;
   for (let it = 0; it < 2000; it++) {
     const g = Array(w.length).fill(0);
     for (let i = 0; i < X.length; i++) {
       const z = w[0] + X[i].reduce((s, v, j) => s + w[j + 1] * v, 0), p = 1 / (1 + Math.exp(-z)), d = p - y[i];
       g[0] += d;
-      for (let j = 0; j < 4; j++) g[j + 1] += d * X[i][j];
+      for (let j = 0; j < nk + nf; j++) g[j + 1] += d * X[i][j];
     }
     for (let j = 0; j < w.length; j++) w[j] -= lr * (g[j] / X.length + (j ? l2 * w[j] : 0));
   }
@@ -549,7 +564,7 @@ async function calibrar(rows, { cat, megaUnit, agora = Date.now(), dias = 7, con
   if (pesosAntes) {
     const por = new Map();
     for (const t of teste.filter(x => x.at >= corte)) {
-      const c = confidence(t.parts, pesosAntes).percent;
+      const c = confidence(t.parts, pesosAntes, t.median).percent;
       if (!por.has(c)) por.set(c, { confianca: c, vendas: 0, certas: 0 });
       const f = por.get(c);
       f.vendas++;
@@ -561,7 +576,7 @@ async function calibrar(rows, { cat, megaUnit, agora = Date.now(), dias = 7, con
 }
 
 module.exports = { catalogo, cotacoesDosRegistros, itemQuotes, megaUnitDe, linhas, marketFit, neighbors, precificar, backtest, resumo, ajustarPesos, calibrar,
-  confidence, ivsDeTexto, ivsParaTexto, ivsDaSoma, diaDe, ITEM, POR_ADICIONAL, NEIGHBORS, CONFIDENCE, STATS };
+  confidence, faixaDe, ivsDeTexto, ivsParaTexto, ivsDaSoma, diaDe, ITEM, POR_ADICIONAL, NEIGHBORS, CONFIDENCE, STATS };
 
 /*
 Partes deste arquivo vêm do Precificador de Pokémon (github.com/briaoAle/precificador-pokemon):

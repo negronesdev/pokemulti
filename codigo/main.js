@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const licenca = require('./licenca.js');
+const bandeja = require('./bandeja.js');
 const PR = require('./precificador.js'); // o 💲 Precificador (preço de um pokémon em gemas)
 
 // ---------- Pasta de dados em Documentos ----------
@@ -434,6 +435,11 @@ const WS_ESCUTA = `(() => {
           if (m.t === 'welcome' && Array.isArray(m.mercado?.catalogo)) {
             window.__pkmCatalogo = {};
             for (const it of m.mercado.catalogo) if (it?.id && it.nome) window.__pkmCatalogo[it.id] = it.nome;
+          }
+          // Os itens "nossos" do jogo (de 70000 para cima), com o ícone: o Monitor de Preços desenha por eles
+          if (m.t === 'welcome' && Array.isArray(m.itensNossos)) {
+            window.__pkmItensIco = {}; // nome proprio: __pkmItensNossos e a lista (so cura) que a Reposicao percorre
+            for (const it of m.itensNossos) if (it?.id) window.__pkmItensIco[it.id] = { n: it.name || it.nome || '', i: it.icon || '' };
           }
           if ((m.t !== 'welcome' && m.t !== 'estado') || !m.estado) return;
           if ('twitch' in m.estado) window.__pkmTwitch = { em: Date.now(), tw: m.estado.twitch };
@@ -1279,6 +1285,37 @@ const PRECO_MAX_REG = 24 * 365; // um ano de histórico de hora em hora
 const precosPath = () => path.join(app.getPath('userData'), 'precos.json');
 let precosCache = null, precosWin = null, precoColetando = false, precoUltimaVerificacao = 0;
 
+// ---- Nome e ícone dos itens como a tela do jogo mostra (14/11/2026). O `nomes` do precos.json fica em inglês, do
+// items.json ("TM Disk Piece"): é por ele que o resto do app reconhece stone, casa e bicicleta. O que APARECE vem
+// daqui: o rótulo ("Fragmento de Z-Move") e o desenho, montados na página do jogo pelo itens-jogo.js a cada
+// verificação e guardados em jogo-itens.json (o desenho só é baixado uma vez por item).
+const itensJogoPath = () => path.join(app.getPath('userData'), 'jogo-itens.json');
+let itensJogoCache = null;
+function itensJogoLer() {
+  if (itensJogoCache) return itensJogoCache;
+  try { itensJogoCache = JSON.parse(fs.readFileSync(itensJogoPath(), 'utf8')); } catch { itensJogoCache = null; }
+  if (!itensJogoCache?.icones) itensJogoCache = { rotulos: {}, icones: {} };
+  itensJogoCache.rotulos ??= {};
+  return itensJogoCache;
+}
+const rotuloItem = id => itensJogoLer().rotulos[id] || precosLer().nomes[id] || String(id);
+async function itensJogoAtualizar(wc, ids) {
+  try {
+    const g = itensJogoLer();
+    const tem = Object.fromEntries(Object.entries(g.icones).map(([id, x]) => [id, x.u]));
+    const r = await wc.executeJavaScript(`(${fs.readFileSync(path.join(__dirname, 'itens-jogo.js'), 'utf8')})(${JSON.stringify(ids)}, ${JSON.stringify(tem)})`);
+    let mudou = false;
+    for (const [id, n] of Object.entries(r?.rotulos || {})) if (n && g.rotulos[id] !== n) { g.rotulos[id] = n; mudou = true; }
+    for (const [id, x] of Object.entries(r?.icones || {})) { g.icones[id] = x; mudou = true; }
+    if (!mudou) return;
+    fs.writeFileSync(itensJogoPath(), JSON.stringify(g));
+    const novos = Object.values(r.icones || {});
+    if (novos.length) appLog(`preços: ${novos.filter(x => x.d).length} ícone(s) de item desenhado(s)` + (novos.some(x => !x.d) ? `, ${novos.filter(x => !x.d).length} sem desenho no jogo` : '') + ` (dicionário: ${r.idioma})`);
+  } catch (e) {
+    appLog(`preços: não montei nomes e ícones dos itens (${e.message})`);
+  }
+}
+
 const precoOpcoes = () => {
   cfg.precos ??= {};
   return Object.assign(cfg.precos, {
@@ -1368,11 +1405,11 @@ function procurarOportunidades(itens, p) {
   if (!novas.length) return;
   p.alertas.push(...novas);
   if (p.alertas.length > 200) p.alertas.splice(0, p.alertas.length - 200);
-  for (const a of novas) appLog(`preços: OPORTUNIDADE ${p.nomes[a.id] || a.id} a ${a.preco} ${a.moeda === 'orb' ? 'gemas' : 'coins'} (média 7d ${a.media}, -${a.desconto}%)`);
+  for (const a of novas) appLog(`preços: OPORTUNIDADE ${rotuloItem(a.id)} a ${a.preco} ${a.moeda === 'orb' ? 'gemas' : 'coins'} (média 7d ${a.media}, -${a.desconto}%)`);
   if (!o.alertas || !Notification.isSupported()) return;
   const fmt = v => Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
   const titulo = novas.length === 1 ? '📉 Oportunidade no RMT' : `📉 ${novas.length} oportunidades no RMT`;
-  const corpo = novas.slice(0, 4).map(a => `${p.nomes[a.id] || a.id}: ${fmt(a.preco)} ${a.moeda === 'orb' ? 'gemas' : 'coins'} (−${a.desconto}% da média ${fmt(a.media)})`).join('\n');
+  const corpo = novas.slice(0, 4).map(a => `${rotuloItem(a.id)}: ${fmt(a.preco)} ${a.moeda === 'orb' ? 'gemas' : 'coins'} (−${a.desconto}% da média ${fmt(a.media)})`).join('\n');
   const n = new Notification({ title: titulo, body: corpo });
   n.on('click', () => { abrirPrecos({ item: novas[0].id, moeda: novas[0].moeda }); });
   n.show();
@@ -1414,6 +1451,7 @@ async function precoColetar(motivo = 'agendado') {
       if (k.startsWith('cat:')) { const id = k.slice(4); if (!p.nomes[id]) p.nomes[id] = v; }
       else p.nomes[k] = v;
     }
+    await itensJogoAtualizar(wc, Object.keys(itens).map(Number));
     p.atual = { em: Date.now(), itens };
     somarNoDiario(p, p.atual.em, itens);
     procurarOportunidades(itens, p);
@@ -1444,6 +1482,7 @@ function precosEnviar(foco) {
   const p = precosLer(), o = precoOpcoes();
   precosWin.webContents.send('pcstate', {
     nomes: p.nomes, registros: p.registros, atual: p.atual ?? null, alertas: p.alertas, opcoes: o, diario: p.diario,
+    rotulos: itensJogoLer().rotulos, icones: Object.fromEntries(Object.entries(itensJogoLer().icones).filter(([, x]) => x.d).map(([id, x]) => [id, x.d])),
     vendidos: vendResumo(p),
     proxima: precoUltimaVerificacao + o.verificarMin * 60000,
     proximoHistorico: (p.registros.at(-1)?.em || Date.now()) + o.historicoMin * 60000,
@@ -2508,7 +2547,8 @@ let prContasLogou = false;
 async function prCalibrar(forcar = false) {
   if (prCalibrando) return;
   const cal = prCalibLer();
-  if (!forcar && cal?.em && Date.now() - cal.em < PR_CALIB_MS) return;
+  // Calibração guardada só com as 4 notas (de antes de 14/11/2026, sem a faixa de preço): refaz já
+  if (!forcar && cal?.em && Date.now() - cal.em < PR_CALIB_MS && (cal.pesos?.length ?? 0) >= 9) return;
   const c = prCtx();
   if (c.erro || c.rows.length < 500) return;
   prCalibrando = true; prCalibProg = ''; prEnviar();
@@ -4274,7 +4314,9 @@ function createWindow() {
   win.on('resize', layout);
   win.on('unresponsive', () => appLog('janela principal sem resposta'));
   win.on('responsive', () => appLog('janela principal voltou a responder'));
-  win.on('close', () => {
+  bandeja.ligar(win, { config: cfg, salvarConfig: saveCfg, appLog });
+  win.on('close', e => {
+    if (bandeja.segurarFechar(e)) return;
     appLog('janela principal fechando');
     clearInterval(metricsTimer);
     clearInterval(flushTimer);
@@ -4295,7 +4337,7 @@ function createWindow() {
 
   // Uso de memória (por conta) a cada 5s na barra (minimizado, ninguém vê a barra)
   const metricsTimer = setInterval(() => {
-    if (!bar || bar.webContents.isDestroyed() || win.isMinimized()) return;
+    if (!bar || bar.webContents.isDestroyed() || win.isMinimized() || !win.isVisible()) return;
     const metrics = app.getAppMetrics();
     const proc = v => {
       if (v.webContents.isDestroyed()) return null;
