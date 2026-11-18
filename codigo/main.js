@@ -3723,15 +3723,18 @@ async function twAutoConferir() {
   twSaldosAtualizar(i).catch(() => {});
 }
 
-// ---------- Aviso de voto do TopIdle ----------
-// A mesma consulta que o jogo faz para montar a tela "Vote & Ganhe" (`/topidle/me`, com o token
-// da sessão da conta): diz se o voto está liberado, quanto falta e o link com o nick. O app só
-// AVISA e abre o link no navegador; o voto (com a conta Google) a pessoa faz lá.
+// ---------- Aviso de voto do IdleHub ----------
+// Em 18/11/2026 o jogo trocou o TopIdle pelo IdleHub.io (tela "Vote & Ganhe": 1 diamante a cada 2 votos, um voto por
+// dia por nick, e o diamante cai sozinho). A mesma consulta que o jogo faz para montar essa tela (`/idlehub/me`, com o
+// token da sessão da conta) diz se o voto está liberado, quanto falta e o link com o nick. O app só AVISA e abre o link;
+// o voto a pessoa faz no NAVEGADOR, porque o IdleHub pede login com Google, e o Google recusa login dentro de apps.
+// (Até 17/11 era `/topidle/me`, e o app conferia a hora também no site do TopIdle; o IdleHub não tem essa consulta,
+// então vale a hora do jogo.)
 const VOTO_JS = `(async () => {
   try {
     const s = JSON.parse(localStorage.getItem('sessao') || 'null');
     if (!s?.token) return null;
-    const r = await fetch('/topidle/me', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: s.token }) });
+    const r = await fetch('/idlehub/me', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: s.token }) });
     if (!r.ok) return null;
     const d = await r.json();
     return { ativo: !!d.ativo, esperaMs: Number(d.esperaMs) || 0, url: String(d.url || ''), nick: String(d.identificador || s.nick || '') };
@@ -3740,66 +3743,18 @@ const VOTO_JS = `(async () => {
 const votos = [null, null, null, null];
 const votoTimers = [];
 
-// O jogo e o TopIdle contam a recarga cada um do seu lado: em 26/10 o jogo liberou o voto e a página
-// do TopIdle ainda dizia "Volte em 1h" (ela arredonda para cima — pode faltar 1 min ou 60). Quem aceita
-// o voto é o TopIdle, então, quando o jogo libera, o app confere com ele usando o login do TopIdle salvo
-// na janela de voto da conta: `/api/me` diz se há login, e `/api/games` traz, para esse login, o
-// `canVote` e o `nextVoteAt` (segundos) de cada jogo. É um pedido por conta por dia, na hora da liberação.
-// Sem login do TopIdle na conta (ou com o site fora), vale a hora do jogo mais 1 h de folga.
-const TOPIDLE_FOLGA_MS = 60 * 60000;
-const topidleProx = [0, 0, 0, 0];     // quando o TopIdle libera (ms); 0 = ainda não perguntado, -1 = já livre
-const votoLiberaEm = [0, 0, 0, 0];    // quando o jogo libera (ms), visto enquanto ainda faltava
-
-async function topidleVoto(i, url) {
-  const ses = session.fromPartition(`persist:conta${i + 1}`);
-  const pedir = async caminho => (await ses.fetch(`https://topidle.com${caminho}`, {
-    headers: { accept: 'application/json' }, signal: AbortSignal.timeout(20000)
-  })).json();
-  try {
-    const me = await pedir('/api/me');
-    if (!me?.user) return { logado: false };
-    const lista = (await pedir('/api/games')).games ?? [];
-    const id = /\/(?:jogo|go)\/([\w-]+)/.exec(url || '')?.[1];
-    const g = lista.find(x => x.id === id) ?? lista.find(x => /pokeidle\.io/i.test(x.name || ''));
-    if (!g) return null;
-    const prox = Number(g.nextVoteAt) * 1000 || 0;
-    return { logado: true, pode: g.canVote !== false && prox <= Date.now(), prox };
-  } catch { return null; }
-}
-
-const horaCurta = ms => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
 async function votoChecar(i) {
   clearTimeout(votoTimers[i]);
   const wc = views[i]?.webContents;
   if (!wc || wc.isDestroyed()) return;
   let d = null;
   if (/^https:\/\/pokeidle\.io\//.test(wc.getURL())) d = await wc.executeJavaScript(VOTO_JS).catch(() => null);
-  // Quanto falta de verdade: o do jogo enquanto ele ainda conta; depois que ele libera, o do TopIdle
-  let espera = d?.esperaMs ?? 0;
-  if (d?.ativo && d.esperaMs > 0) {
-    votoLiberaEm[i] = Date.now() + d.esperaMs;
-    topidleProx[i] = 0;
-  } else if (d?.ativo) {
-    // Pergunta uma vez quando o jogo libera, e de novo só quando chegar a hora que o TopIdle deu
-    if (topidleProx[i] === 0 || (topidleProx[i] > 0 && topidleProx[i] <= Date.now())) {
-      const t = await topidleVoto(i, d.url);
-      if (t?.logado) {
-        topidleProx[i] = t.pode || !(t.prox > Date.now()) ? -1 : t.prox;
-        if (topidleProx[i] > 0) twAutoLog(`Voto Conta ${i + 1}: o jogo já liberou, mas o TopIdle só às ${horaCurta(t.prox)}`);
-      } else if (votoLiberaEm[i] + TOPIDLE_FOLGA_MS > Date.now()) {
-        topidleProx[i] = votoLiberaEm[i] + TOPIDLE_FOLGA_MS;
-        twAutoLog(`Voto Conta ${i + 1}: ${t ? 'sem login do TopIdle nesta conta' : 'TopIdle não respondeu'} — aviso às ${horaCurta(topidleProx[i])} (1 h de folga)`);
-      } else topidleProx[i] = -1;
-    }
-    if (topidleProx[i] > Date.now()) espera = topidleProx[i] - Date.now();
-  }
   const antes = !!votos[i]?.pode, primeira = votos[i] === null && !votoTimers[`ok${i}`];
-  votos[i] = d ? { ...d, esperaMs: espera, pode: d.ativo && espera <= 0 } : null;
+  votos[i] = d ? { ...d, pode: d.ativo && d.esperaMs <= 0 } : null;
   if (primeira || antes !== !!votos[i]?.pode) {
     votoTimers[`ok${i}`] = true;
     const h = Math.ceil((votos[i]?.esperaMs ?? 0) / 60000);
-    twAutoLog(`Voto Conta ${i + 1}: ${!d ? 'sem resposta (conta logada?)' : votos[i].pode ? 'liberado' : `falta ${Math.floor(h / 60)}h${String(h % 60).padStart(2, '0')}`}`);
+    twAutoLog(`Voto Conta ${i + 1}: ${!d ? 'sem resposta (conta logada?)' : !d.ativo ? 'voto desligado no jogo' : votos[i].pode ? 'liberado' : `falta ${Math.floor(h / 60)}h${String(h % 60).padStart(2, '0')}`}`);
   }
   if (votos[i]?.pode && !antes) avisarVoto(i);
   // Olha de novo logo depois de a recarga acabar, ou a cada 15 min
@@ -3814,53 +3769,21 @@ function avisarVoto(i) {
   twAutoLog(`Voto liberado na Conta ${i + 1} (${v?.nick || cfg.names[i]})`);
   if (!Notification.isSupported()) return;
   const n = new Notification({
-    title: 'Voto disponível no TopIdle',
-    body: `${cfg.names[i]}${v?.nick ? ` (${v.nick})` : ''} já pode votar. Clique para abrir.`
+    title: 'Voto disponível no IdleHub',
+    body: `${cfg.names[i]}${v?.nick ? ` (${v.nick})` : ''} já pode votar. Clique para abrir no navegador.`
   });
   n.on('click', () => abrirVoto(i));
   n.show();
 }
 
+// O voto abre no navegador padrão (o login do IdleHub é com Google, recusado dentro de apps)
+const isVotoHost = host => /(^|\.)idlehub\.io$/.test(host);
 function abrirVoto(i, url = votos[i]?.url) {
   if (!url || !/^https:\/\//i.test(url)) return;
-  abrirJanelaVoto(i, url);
-  // O TopIdle avisa o jogo em segundos; daqui a 3 min o selo some se o voto entrou
+  shell.openExternal(url);
+  // O IdleHub avisa o jogo em segundos; daqui a 3 min o selo some se o voto entrou
   clearTimeout(votoTimers[i]);
   votoTimers[i] = setTimeout(() => votoChecar(i), 3 * 60000);
-}
-
-// O TopIdle abre numa janela do app, na sessão da conta: o login dele fica salvo por conta.
-// Lá dá para entrar com Google ou Discord, mas o Google recusa login dentro de apps (o mesmo
-// bloqueio do jogo); o Discord funciona.
-const isTopIdleHost = host => /(^|\.)topidle\.com$/.test(host);
-const votoWins = [];
-function abrirJanelaVoto(i, url) {
-  const part = `persist:conta${i + 1}`;
-  let w = votoWins[i];
-  if (w && !w.isDestroyed()) {
-    w.loadURL(url);
-    if (w.isMinimized()) w.restore();
-    return w.focus();
-  }
-  w = votoWins[i] = new BrowserWindow({
-    width: 1150, height: 850, parent: win, autoHideMenuBar: true, backgroundColor: '#0e0e10',
-    title: `Votar no TopIdle · ${cfg.names[i]}${votos[i]?.nick ? ` (${votos[i].nick})` : ''}`,
-    webPreferences: { partition: part, contextIsolation: true, sandbox: true }
-  });
-  w.on('page-title-updated', e => e.preventDefault());
-  // Login (Discord/Google) em pop-up na mesma sessão; links de fora vão para o navegador
-  w.webContents.setWindowOpenHandler(({ url: u }) => {
-    try {
-      const host = new URL(u).hostname;
-      if (isTopIdleHost(host) || /(^|\.)discord\.com$|(^|\.)google\.com$/.test(host)) {
-        return { action: 'allow', overrideBrowserWindowOptions: { width: 520, height: 760, autoHideMenuBar: true, webPreferences: { partition: part } } };
-      }
-    } catch {}
-    shell.openExternal(u);
-    return { action: 'deny' };
-  });
-  w.on('closed', () => setTimeout(() => votoChecar(i), 5000));
-  w.loadURL(url);
 }
 
 // ⏸ PAUSAR AS LIVES (06/11/2026, pedido do usuário depois de fechar as lives à mão às 15:35 e o app reabrir sozinho às
@@ -4179,8 +4102,8 @@ function createGameView(i) {
       const host = new URL(url).hostname;
       // Canal da Twitch clicado no jogo (tela "Bônus Twitch"): abre no painel desta conta
       if ((isTwitchHost(host) || isKickHost(host)) && twAdd(i, url)) return { action: 'deny' };
-      // "Votar no TopIdle" do jogo: abre na janela de voto do app, e não no navegador
-      if (isTopIdleHost(host)) { abrirVoto(i, url); return { action: 'deny' }; }
+      // "Votar no IdleHub" do jogo: abre no navegador, e o selo da barra volta a conferir em 3 min
+      if (isVotoHost(host)) { abrirVoto(i, url); return { action: 'deny' }; }
       const authLike = /pokeidle\.io$|accounts\.google\.com|google\.com$|discord\.com$|facebook\.com$/.test(host);
       if (authLike) {
         return {
@@ -4405,7 +4328,7 @@ function createWindow() {
   caixaAgendar(CAIXA_TESTE ? 3000 : 45000);
   caixaTimerPainel = setTimeout(caixaPainel, CAIXA_TESTE ? 8000 : 4 * 60000);
 
-  // Voto do TopIdle: primeira consulta de cada conta ~1,5 min depois de abrir (o jogo já logou)
+  // Voto do IdleHub: primeira consulta de cada conta ~1,5 min depois de abrir (o jogo já logou)
   for (let i = 0; i < TOTAL; i++) votoTimers[i] = setTimeout(() => votoChecar(i), 90000 + i * 5000);
 
   // Lives com bônus da Conta 1: primeira conferência 2 min depois de abrir (dá tempo do jogo
@@ -4436,6 +4359,64 @@ const VIGIA_ESPERAS_MS = VIGIA_TESTE ? [1500, 3000, 6000] : [3 * 60000, 10 * 600
 const VIGIA_LOGIN_EXTERNO = 4001;
 const vigiaNovo = () => ({ jaConectou: false, foraDesde: 0, tentativas: 0, proxima: 0, avisou: false, externo: false });
 const vigia = Array.from({ length: TOTAL }, vigiaNovo);
+
+// ---- O jogo que não abre (18/11/2026, ideia do PokeIdle Deck): a página carrega, mas o jogo fica na tela de abertura
+// (a barra de carga), sem conectar nem chegar ao login; ou a página nem carregou (site fora, erro de rede). O vigia de
+// conexão não pegava esse caso, porque só age na conta que JÁ conectou. Agora, a conta presa assim por 1 min é
+// recarregada; se não abrir, de novo depois de 2, 3, 4 e 5 min, e daí de 5 em 5. Da 2ª vez em diante, recarrega LIMPO:
+// apaga o cache do jogo (o de disco, o Cache Storage e os service workers do pokeidle.io), mas o login fica (o jogo o
+// guarda no localStorage). Não mexe: na tela de login, de confirmar o e-mail ou de escolher o nick; com um aviso do
+// jogo à vista (conta aberta em outro lugar, limite de contas na rede, sessão inválida); sem internet no PC; e na
+// página que não é a do jogo. Cada recarga vai para o app.log com onde o jogo parou (a % da carga).
+const ABRIR_ESPERA_MS = VIGIA_TESTE ? 1000 : 60000;
+const ABRIR_ESPERAS_MS = VIGIA_TESTE ? [1000, 1500, 2000] : [2, 3, 4, 5].map(m => m * 60000);
+const ABRIR_JS = `(() => {
+  const vis = s => { const e = document.querySelector(s); return !!e && !e.classList.contains('hidden'); };
+  if (!document.querySelector('#portal') && !document.querySelector('#app')) return { pagina: false };
+  return {
+    pagina: true,
+    abriu: vis('#app') || vis('#login') || vis('#confirmar-email') || vis('#escolher-nick'),
+    aviso: !!document.querySelector('[role=alertdialog]:not(.hidden)'),
+    pct: vis('#carregando') ? (document.querySelector('#carga-pct')?.textContent || '0') + '%' : 'sem a barra de carga'
+  };
+})()`;
+const abrirNovo = () => ({ travadaDesde: 0, tentativas: 0, proxima: 0, avisou: false });
+const abrir = Array.from({ length: TOTAL }, abrirNovo);
+async function vigiaAbertura(i, wc) {
+  const a = abrir[i];
+  if (!/^https:\/\/pokeidle\.io\//.test(wc.getURL())) return;
+  let r = null;
+  try { r = await Promise.race([wc.executeJavaScript(ABRIR_JS), new Promise(res => setTimeout(res, 5000, null))]); } catch {}
+  if (!r) return; // não respondeu: não dá para saber
+  const agora = Date.now();
+  if (r.pagina && (r.abriu || r.aviso)) {
+    if (a.tentativas) {
+      appLog(`vigia: ${cfg.names[i]} abriu depois de ${a.tentativas} recarga(s)${r.aviso && !r.abriu ? ' (com um aviso do jogo na tela)' : ''}`);
+      if (a.avisou) vigiaAvisar(i, 'O jogo abriu de novo nesta conta.');
+    }
+    Object.assign(a, abrirNovo());
+    return;
+  }
+  if (!a.travadaDesde) { a.travadaDesde = agora; return; }
+  if (agora - a.travadaDesde < ABRIR_ESPERA_MS || agora < a.proxima) return;
+  a.tentativas++;
+  a.proxima = agora + ABRIR_ESPERAS_MS[Math.min(a.tentativas, ABRIR_ESPERAS_MS.length) - 1];
+  const limpo = a.tentativas >= 2;
+  const min = Math.max(1, Math.round((agora - a.travadaDesde) / 60000));
+  appLog(`vigia: ${cfg.names[i]} ${r.pagina ? `presa na abertura do jogo (${r.pct})` : 'sem a página do jogo (não carregou)'} há ${min} min; recarreguei${limpo ? ' limpo' : ''} (tentativa ${a.tentativas})`);
+  if (a.tentativas === 3 && !a.avisou) {
+    a.avisou = true;
+    vigiaAvisar(i, `O jogo não abre nesta conta há ${min} min. Já recarreguei 2 vezes, limpando o cache; continuo tentando.`);
+  }
+  if (limpo) {
+    const ses = wc.session;
+    await Promise.all([
+      ses.clearCache().catch(() => {}),
+      ses.clearStorageData({ origin: 'https://pokeidle.io', storages: ['cachestorage', 'serviceworkers'] }).catch(() => {})
+    ]);
+    if (!wc.isDestroyed()) wc.reloadIgnoringCache();
+  } else wc.reload();
+}
 function vigiaAvisar(i, corpo) {
   if (!Notification.isSupported()) return;
   const n = new Notification({ title: `PokeMulti: ${cfg.names[i]}`, body: corpo });
@@ -4450,6 +4431,9 @@ async function vigiaTick() {
     for (let i = 0; i < TOTAL; i++) {
       const wc = views[i]?.webContents, v = vigia[i];
       if (!wc || wc.isDestroyed() || wc.isLoading()) continue;
+      // Conta que ainda não conectou nesta abertura do app: confere se o jogo abriu
+      if (!v.jaConectou) await vigiaAbertura(i, wc);
+      if (wc.isDestroyed() || wc.isLoading()) continue;
       let r = null;
       try {
         r = await Promise.race([
@@ -4793,6 +4777,7 @@ ipcMain.on('tabMenu', (_e, i) => {
 ipcMain.on('clearSession', async (_e, i) => {
   await session.fromPartition(`persist:conta${i + 1}`).clearStorageData();
   Object.assign(vigia[i], vigiaNovo());
+  Object.assign(abrir[i], abrirNovo());
   views[i].webContents.loadURL(GAME_URL);
 });
 

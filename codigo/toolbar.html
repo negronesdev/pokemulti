@@ -99,12 +99,12 @@
       t.innerHTML = `<span class="dot ${st.loading[i] ? 'load' : ''}"></span>
         <span class="k">${i+1}</span><span class="n"></span><span class="m">${mem}${cpu}</span>`;
       t.querySelector('.n').textContent = name;
-      // Voto do TopIdle liberado nesta conta: o selo abre a página de voto no navegador
+      // Voto do IdleHub liberado nesta conta: o selo abre a página de voto no navegador
       if (st.votos?.[i]) {
         const v = document.createElement('span');
         v.className = 'voto';
         v.textContent = '🗳';
-        v.title = 'Voto disponível no TopIdle — clique para votar (abre aqui no app, com o nick desta conta)';
+        v.title = 'Voto disponível no IdleHub — clique para votar (abre no navegador, com o nick desta conta)';
         v.onclick = e => { e.stopPropagation(); api.votar(i); };
         t.querySelector('.n').after(v);
       }
