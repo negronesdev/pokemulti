@@ -93,4 +93,18 @@ function lerKey(txt, publicaB64) {
   return { ok: true, key: PREFIXO + corpo.slice(0, TAM_TEXTO), codigo: paraB32(p.subarray(1, 11)), ateDia: p.readUInt16BE(11), emitidoDia: p.readUInt16BE(13) };
 }
 
-module.exports = { CHAVE_PUBLICA, DIA, diaDe, fimDoDia, dataDoDia, codigoDoPc, normalizarCodigo, formatarCodigo, gerarKey, lerKey };
+// ---- A atualização pelo app (18/11/2026): o instalador de cada versão sai assinado com a MESMA chave privada das keys
+// (o empacotar.js assina; a chave nunca sobe). A assinatura cobre a versão e o SHA-256 do instalador: sem a chave, nem
+// quem tomar a conta do GitHub publica uma atualização que o app aceite, nem troca uma versão por outra mais velha.
+const DOMINIO_ATUALIZACAO = 'pokemulti-atualizacao-v1:';
+const textoAtualizacao = (versao, sha256hex) => Buffer.from(`${DOMINIO_ATUALIZACAO}${versao}:${String(sha256hex).toLowerCase()}`);
+const assinarAtualizacao = (versao, sha256hex, chavePrivadaPem) =>
+  crypto.sign(null, textoAtualizacao(versao, sha256hex), crypto.createPrivateKey(chavePrivadaPem)).toString('base64');
+function conferirAtualizacao(versao, sha256hex, assinaturaB64, publicaB64) {
+  try {
+    const a = Buffer.from(String(assinaturaB64 ?? '').trim(), 'base64');
+    return a.length === 64 && crypto.verify(null, textoAtualizacao(versao, sha256hex), chavePublica(publicaB64), a);
+  } catch { return false; }
+}
+
+module.exports = { CHAVE_PUBLICA, DIA, diaDe, fimDoDia, dataDoDia, codigoDoPc, normalizarCodigo, formatarCodigo, gerarKey, lerKey, assinarAtualizacao, conferirAtualizacao };

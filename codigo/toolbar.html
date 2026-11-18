@@ -204,11 +204,19 @@
     for (const id of ['pd', 'rep', 'hu', 'cx', 'ec', 'pk', 'pr', 'pc', 'sn', 'tw']) document.getElementById(id).classList.toggle('premium', gratis);
     const n = document.getElementById('nova');
     n.style.display = l.nova ? '' : 'none';
-    n.title = `Saiu a versão ${l.nova}. Clique para baixar o instalador. Seus logins e ajustes continuam guardados.`;
+    if (!n.disabled) n.title = `Saiu a versão ${l.nova}. Clique para atualizar: o app baixa, confere, instala e abre de novo sozinho. Seus logins e ajustes continuam guardados.`;
     ajustar();
   });
   document.getElementById('lic').onclick = () => api.licAbrir();
-  document.getElementById('nova').onclick = () => api.licLink('versao');
+  document.getElementById('nova').onclick = () => api.licAtualizar();
+  // Atualização pelo app: o botão mostra o andamento
+  api.onAtualizacao(a => {
+    const n = document.getElementById('nova');
+    n.disabled = a.fase !== 'erro';
+    n.textContent = a.fase === 'baixando' ? `⬇ ${a.pct}%` : a.fase === 'conferindo' ? '🔒 Conferindo…' : a.fase === 'instalando' ? '⬆ Instalando…' : '⬆ Nova versão';
+    if (a.fase === 'erro') n.title = `Não deu para atualizar pelo app (${a.motivo}). Clique para tentar de novo.`;
+    ajustar();
+  });
 </script>
 </body>
 </html>

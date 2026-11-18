@@ -158,8 +158,8 @@ function enviarBarra() {
   const m = premiumAoAbrir ? e : { ...e, modo: 'gratis' };
   barra.send('licstate', { modo: m.modo, dias: m.dias, ateTxt: m.ateTxt, nova: novaVersao });
 }
-// Versão nova: pergunta ao GitHub qual é a última e, se for maior que esta, a barra mostra um botão. Só avisa: quem baixa
-// e instala é o cliente. Não vai nenhum dado no pedido.
+// Versão nova: pergunta ao GitHub qual é a última e, se for maior que esta, a barra mostra um botão. O botão atualiza
+// pelo app, com a assinatura conferida (atualizar.js, desde 18/11/2026). Não vai nenhum dado no pedido.
 let novaVersao = '';
 const partesVersao = v => String(v).replace(/^v/, '').split('.').map(n => Number(n) || 0);
 function versaoMaior(a, b) {
@@ -220,6 +220,10 @@ function registrarIpc() {
     if (qual === 'versao') shell.openExternal(`https://github.com/${REPO_PUBLICO}/releases/latest`);
   });
   ipcMain.on('lic:abrir', () => { recursoPedido = ''; abrirJanela(); });
+  // ⬆ Nova versão: atualiza pelo app (atualizar.js), no plano grátis também
+  ipcMain.on('lic:atualizar', () => {
+    if (novaVersao) require('./atualizar.js').iniciar({ versao: novaVersao, janela: principal, barra, repo: REPO_PUBLICO, log: appLog });
+  });
 }
 
 // ---- Com o app aberto: o Premium venceu, reabre no plano grátis (desligar cada recurso com o app aberto deixaria algum

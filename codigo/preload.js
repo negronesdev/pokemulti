@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('api', {
   licLink: qual => ipcRenderer.send('lic:link', qual),
   licAbrir: () => ipcRenderer.send('lic:abrir'),
   onLic: fn => ipcRenderer.on('licstate', (_e, l) => fn(l)),
+  licAtualizar: () => ipcRenderer.send('lic:atualizar'),
+  onAtualizacao: fn => ipcRenderer.on('lic:atualizacao', (_e, a) => fn(a)),
   select: i => ipcRenderer.send('select', i),
   proxima: passo => ipcRenderer.send('proxima', passo),
   reload: i => ipcRenderer.send('reload', i),
