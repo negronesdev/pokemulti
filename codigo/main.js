@@ -3727,7 +3727,7 @@ async function twAutoConferir() {
 // Em 18/11/2026 o jogo trocou o TopIdle pelo IdleHub.io (tela "Vote & Ganhe": 1 diamante a cada 2 votos, um voto por
 // dia por nick, e o diamante cai sozinho). A mesma consulta que o jogo faz para montar essa tela (`/idlehub/me`, com o
 // token da sessão da conta) diz se o voto está liberado, quanto falta e o link com o nick. O app só AVISA e abre o link;
-// o voto a pessoa faz no NAVEGADOR, porque o IdleHub pede login com Google, e o Google recusa login dentro de apps.
+// o voto a pessoa faz numa janela do app, na sessão da conta (ver abrirJanelaVoto).
 // (Até 17/11 era `/topidle/me`, e o app conferia a hora também no site do TopIdle; o IdleHub não tem essa consulta,
 // então vale a hora do jogo.)
 const VOTO_JS = `(async () => {
@@ -3770,17 +3770,48 @@ function avisarVoto(i) {
   if (!Notification.isSupported()) return;
   const n = new Notification({
     title: 'Voto disponível no IdleHub',
-    body: `${cfg.names[i]}${v?.nick ? ` (${v.nick})` : ''} já pode votar. Clique para abrir no navegador.`
+    body: `${cfg.names[i]}${v?.nick ? ` (${v.nick})` : ''} já pode votar. Clique para abrir.`
   });
   n.on('click', () => abrirVoto(i));
   n.show();
 }
 
-// O voto abre no navegador padrão (o login do IdleHub é com Google, recusado dentro de apps)
+// O voto abre numa janela do app, na SESSÃO DA CONTA (18/11/2026, pedido do usuário): o IdleHub conta 1 voto a cada 24 h
+// por conta de login, então cada conta do jogo precisa do próprio login lá, e a janela guarda o de cada uma. Entre com o
+// DISCORD: o Google recusa login dentro de apps (é o mesmo bloqueio do jogo, e não contornamos). Links que não são do
+// IdleHub, do Discord ou do Google vão para o navegador.
 const isVotoHost = host => /(^|\.)idlehub\.io$/.test(host);
+const isLoginVotoHost = host => isVotoHost(host) || /(^|\.)discord\.com$|(^|\.)google\.com$/.test(host);
+const votoWins = [];
+function abrirJanelaVoto(i, url) {
+  const part = `persist:conta${i + 1}`;
+  let w = votoWins[i];
+  if (w && !w.isDestroyed()) {
+    w.loadURL(url);
+    if (w.isMinimized()) w.restore();
+    return w.focus();
+  }
+  w = votoWins[i] = new BrowserWindow({
+    width: 1100, height: 850, parent: win, autoHideMenuBar: true, backgroundColor: '#0e0e10',
+    title: `Votar no IdleHub · ${cfg.names[i]}${votos[i]?.nick ? ` (${votos[i].nick})` : ''}`,
+    webPreferences: { partition: part, contextIsolation: true, sandbox: true }
+  });
+  w.on('page-title-updated', e => e.preventDefault());
+  w.webContents.setWindowOpenHandler(({ url: u }) => {
+    try {
+      if (isLoginVotoHost(new URL(u).hostname)) {
+        return { action: 'allow', overrideBrowserWindowOptions: { width: 520, height: 760, autoHideMenuBar: true, webPreferences: { partition: part } } };
+      }
+    } catch {}
+    shell.openExternal(u);
+    return { action: 'deny' };
+  });
+  w.on('closed', () => setTimeout(() => votoChecar(i), 5000));
+  w.loadURL(url);
+}
 function abrirVoto(i, url = votos[i]?.url) {
   if (!url || !/^https:\/\//i.test(url)) return;
-  shell.openExternal(url);
+  abrirJanelaVoto(i, url);
   // O IdleHub avisa o jogo em segundos; daqui a 3 min o selo some se o voto entrou
   clearTimeout(votoTimers[i]);
   votoTimers[i] = setTimeout(() => votoChecar(i), 3 * 60000);
@@ -4102,7 +4133,7 @@ function createGameView(i) {
       const host = new URL(url).hostname;
       // Canal da Twitch clicado no jogo (tela "Bônus Twitch"): abre no painel desta conta
       if ((isTwitchHost(host) || isKickHost(host)) && twAdd(i, url)) return { action: 'deny' };
-      // "Votar no IdleHub" do jogo: abre no navegador, e o selo da barra volta a conferir em 3 min
+      // "Votar no IdleHub" do jogo: abre na janela de voto da conta, e o selo da barra volta a conferir em 3 min
       if (isVotoHost(host)) { abrirVoto(i, url); return { action: 'deny' }; }
       const authLike = /pokeidle\.io$|accounts\.google\.com|google\.com$|discord\.com$|facebook\.com$/.test(host);
       if (authLike) {
