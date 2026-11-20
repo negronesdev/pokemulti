@@ -5,5 +5,8 @@
   "instagram": "soulsite26",
   "pixChave": "e16e3025-a45c-45bd-a14a-db480626e8a5",
   "pixNome": "45.887.042 RAFAEL VIEIRA",
-  "pixCidade": "SAO PAULO"
+  "pixCidade": "SAO PAULO",
+  "cripto": {
+    "worker": "https://pokemulti-cripto.pokemulti-cripto.workers.dev"
+  }
 }

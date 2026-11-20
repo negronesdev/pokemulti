@@ -7,6 +7,9 @@ const fs = require('fs'), path = require('path');
 
 // As novidades de cada versão, da mais nova para a mais antiga. Sem valores, como no site.
 const NOVIDADES = [
+  { versao: '1.3.7', data: '20/11/2026', itens: [
+    ['💠 Premium pago em cripto', 'Na tela do Premium, a aba "Pagar com cripto (USDT)" aceita USDT na rede Solana, em 30 dias ou permanente. Pela Phantom ou pela Solflare é só escanear o QR; de corretora, envie o valor exato. O app confere sozinho e liga o Premium em segundos, sem precisar mandar comprovante. Pagou e fechou o app? Ele confere de novo ao abrir.']
+  ] },
   { versao: '1.3.6', data: '20/11/2026', itens: [
     ['❓ Ajuda', 'Esta janela: o tutorial de todas as ferramentas, as novidades de cada versão (abrem sozinhas quando o app atualiza) e o botão "Verificar atualizações".'],
     ['🏆 Caça do Top Catch', 'Numa conta, vai de hunt em hunt atrás das espécies que ainda faltam no Top Catch da semana. Só troca de hunt com a trava do combate livre e pula a hunt onde o pokémon cai. Quem captura é o próprio jogo, pelo "Lançar sem parar" do VIP.'],

@@ -4,6 +4,9 @@
 const crypto = require('crypto');
 
 const CHAVE_PUBLICA = 'GOpYUAuzDNRvfUayO9hIEuRZSw7ZxZ4Fe92JkiA61H0='; // 32 bytes em base64 (gerador/criar-chave.js)
+// A chave das keys pagas em cripto (20/11/2026): quem assina é o Cloudflare Worker (cripto-worker/), com uma chave só
+// dele (gerador/criar-chave-cripto.js). Se ela vazar, troca-se só esta linha numa atualização; as keys do Pix seguem.
+const CHAVE_PUBLICA_CRIPTO = 'pSAEsCM31t+rHXCYCod/pDBlj8lhNoTCMET/aWuHWo0=';
 const DOMINIO = Buffer.from('pokemulti-key-v1:');
 const SPKI_ED25519 = Buffer.from('302a300506032b6570032100', 'hex');
 const ALFABETO = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -92,6 +95,13 @@ function lerKey(txt, publicaB64) {
   if (!valida) return { ok: false, erro: 'invalida' };
   return { ok: true, key: PREFIXO + corpo.slice(0, TAM_TEXTO), codigo: paraB32(p.subarray(1, 11)), ateDia: p.readUInt16BE(11), emitidoDia: p.readUInt16BE(13) };
 }
+// O que o app aceita: a key do Pix (chave principal) ou a paga em cripto (chave do Worker). O formato é o mesmo.
+function lerKeyAceita(txt) {
+  const a = lerKey(txt);
+  if (a.ok || a.erro === 'incompleta') return a;
+  const b = lerKey(txt, CHAVE_PUBLICA_CRIPTO);
+  return b.ok ? { ...b, cripto: true } : a;
+}
 
 // ---- A atualização pelo app (18/11/2026): o instalador de cada versão sai assinado com a MESMA chave privada das keys
 // (o empacotar.js assina; a chave nunca sobe). A assinatura cobre a versão e o SHA-256 do instalador: sem a chave, nem
@@ -107,4 +117,4 @@ function conferirAtualizacao(versao, sha256hex, assinaturaB64, publicaB64) {
   } catch { return false; }
 }
 
-module.exports = { CHAVE_PUBLICA, DIA, diaDe, fimDoDia, dataDoDia, codigoDoPc, normalizarCodigo, formatarCodigo, gerarKey, lerKey, assinarAtualizacao, conferirAtualizacao };
+module.exports = { CHAVE_PUBLICA, CHAVE_PUBLICA_CRIPTO, DIA, diaDe, fimDoDia, dataDoDia, codigoDoPc, normalizarCodigo, formatarCodigo, gerarKey, lerKey, lerKeyAceita, assinarAtualizacao, conferirAtualizacao };

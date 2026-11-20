@@ -3,6 +3,10 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('api', {
   licDados: () => ipcRenderer.invoke('lic:dados'),
   licAplicar: txt => ipcRenderer.invoke('lic:aplicar', txt),
+  criptoPedido: plano => ipcRenderer.invoke('lic:cripto:pedido', plano),
+  criptoConferir: () => ipcRenderer.invoke('lic:cripto:conferir'),
+  criptoCopiar: qual => ipcRenderer.send('lic:cripto:copiar', qual),
+  criptoTransacao: sig => ipcRenderer.send('lic:cripto:transacao', sig),
   licCopiar: qual => ipcRenderer.send('lic:copiar', qual),
   licLink: qual => ipcRenderer.send('lic:link', qual),
   licAbrir: () => ipcRenderer.send('lic:abrir'),

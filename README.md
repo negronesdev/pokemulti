@@ -8,7 +8,7 @@ Programa para Windows que abre até 4 contas do pokeidle.io em uma janela, com S
 
 1. Baixe e instale. É grátis, sem cadastro, e os primeiros 7 dias são de Premium, com todos os recursos.
 2. Entre nas suas contas, na própria página do jogo, dentro do programa. Os logins ficam só no seu PC.
-3. Depois dos 7 dias, o programa continua grátis, só com o jogo nas 4 contas. Para manter as ferramentas (Sniper, monitores do Mercado, Precificador, lives e as outras), ele mostra o valor da mensalidade e o QR do Pix. Envie o comprovante pelo WhatsApp ou pelo Instagram, e você recebe uma key que libera o Premium por 30 dias.
+3. Depois dos 7 dias, o programa continua grátis, só com o jogo nas 4 contas. Para manter as ferramentas (Sniper, monitores do Mercado, Precificador, lives e as outras), ele mostra o valor da mensalidade e o QR do Pix. Envie o comprovante pelo WhatsApp ou pelo Instagram, e você recebe uma key que libera o Premium por 30 dias. Também dá para pagar em USDT, na rede Solana, pela aba "Pagar com cripto": o programa confere o pagamento sozinho e libera o Premium em segundos, por 30 dias ou permanente.
 
 ## O código está aberto para você conferir
 
@@ -20,9 +20,9 @@ A pasta [`codigo`](codigo) tem o código do programa, o mesmo que vira o instala
 
 O instalador é feito a partir desse código, com os comentários retirados e o código compactado. Se preferir, rode direto do código: instale o [Node.js](https://nodejs.org), abra um terminal na pasta `codigo` e rode `npm install` e depois `npm start`.
 
-Para conferir se o instalador que você baixou é o original, compare a impressão digital dele. No PowerShell, na pasta do download, rode `Get-FileHash .\PokeMulti-Setup.exe`. A da versão 1.3.6 é esta (maiúsculas ou minúsculas, tanto faz):
+Para conferir se o instalador que você baixou é o original, compare a impressão digital dele. No PowerShell, na pasta do download, rode `Get-FileHash .\PokeMulti-Setup.exe`. A da versão 1.3.7 é esta (maiúsculas ou minúsculas, tanto faz):
 
-`c0f8dec49ea312f325baabe515fefaded9f8e130a7dbb8dd5ee33c5808956d7f`
+`ddd8a3540627dba5e0b72929794e19d61cdaccc25009f35fb9de1e1a8076f567`
 
 ## Android (versão de teste)
 
