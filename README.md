@@ -24,6 +24,16 @@ Para conferir se o instalador que você baixou é o original, compare a impress�
 
 `609fcd6d042c42a576b0bfd930167df80d05c2920eaf2f6efc63b15591672721`
 
+## Android (versão de teste)
+
+Também há uma versão de teste para celular: as 4 contas, cada uma com o seu login, rodando em segundo plano, com a vigia das contas, o Mercado com histórico de preços, o Sniper com teto de gasto por dia e as lives.
+
+**[Baixar o PokeMulti para Android 0.4](https://github.com/negronesdev/pokemulti/releases/download/android-v0.4/PokeMulti-Android.apk)** (Android 9 ou mais novo)
+
+- O app não está na Play Store: o Android pede para permitir a instalação do arquivo e pode mostrar o aviso do Play Protect.
+- A mesma conta do jogo aberta no celular e no PC ao mesmo tempo não funciona: o jogo derruba a outra sessão.
+- Impressão digital (SHA-256) do `PokeMulti-Android.apk`: `54947a4b869d18f3f1ee81ee46fc10cd3bc018e8ecc36bb619c00a8cff97b1a3`
+
 ## O Windows mostrou um aviso
 
 O instalador ainda não tem certificado pago. Se aparecer "O Windows protegeu o computador", clique em **Mais informações** e em **Executar assim mesmo**.
