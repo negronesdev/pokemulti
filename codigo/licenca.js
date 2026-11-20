@@ -178,6 +178,25 @@ async function conferirVersao() {
     enviarBarra();
   } catch {}
 }
+// "Verificar atualizações" (20/11/2026, pedido do usuário): a mesma pergunta ao GitHub, na hora, com a resposta para a
+// tela (a conferência automática só fala quando há versão nova)
+async function verificarAgora() {
+  const atual = app.getVersion();
+  try {
+    const r = await net.fetch(`https://api.github.com/repos/${REPO_PUBLICO}/releases/latest`, { headers: { accept: 'application/vnd.github+json' }, cache: 'no-store' });
+    if (!r.ok) return { ok: false, atual, erro: `o GitHub respondeu ${r.status}` };
+    const tag = String((await r.json()).tag_name ?? '');
+    if (!/^v?\d+\.\d+\.\d+$/.test(tag)) return { ok: false, atual, erro: 'resposta sem versão' };
+    if (versaoMaior(tag, atual)) {
+      if (novaVersao !== tag.replace(/^v/, '')) { novaVersao = tag.replace(/^v/, ''); appLog(`licença: versão nova disponível, ${novaVersao} (verificada pelo botão)`); enviarBarra(); }
+      return { ok: true, atual, nova: novaVersao };
+    }
+    return { ok: true, atual, nova: '' };
+  } catch (e) { return { ok: false, atual, erro: 'sem conexão com o GitHub' }; }
+}
+function atualizarAgora() {
+  if (novaVersao) require('./atualizar.js').iniciar({ versao: novaVersao, janela: principal, barra, repo: REPO_PUBLICO, log: appLog });
+}
 function reabrir() {
   app.relaunch();
   app.quit();
@@ -304,4 +323,4 @@ function ligarBarra(wc, w) {
   wc.on('did-finish-load', enviarBarra);
 }
 
-module.exports = { iniciar, ligarBarra, premium, pedirPremium };
+module.exports = { iniciar, ligarBarra, premium, pedirPremium, verificarAgora, atualizarAgora };

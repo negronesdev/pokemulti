@@ -5,6 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const licenca = require('./licenca.js');
 const bandeja = require('./bandeja.js');
+const ajuda = require('./ajuda.js');
 const PR = require('./precificador.js'); // o 💲 Precificador (preço de um pokémon em gemas)
 
 // ---------- Pasta de dados em Documentos ----------
@@ -379,6 +380,8 @@ const WS_ESCUTA = `(() => {
       this.addEventListener('message', ev => {
         const d = ev.data;
         if (typeof d !== 'string') return;
+        // A vigia de sessão zumbi (main.js) olha quando chegou o último pedaço do combate
+        if (d.indexOf('"t":"batalha"') >= 0) window.__pkmBatalhaEm = Date.now();
         const hora = d.indexOf('"servidorAgora":');
         if (hora >= 0) { const n = Number(/^"servidorAgora":(\\d+)/.exec(d.slice(hora))?.[1]); if (n) window.__pkmOffset = n - Date.now(); }
         const tw = d.indexOf('"twitch"') >= 0, kk = d.indexOf('"kick"') >= 0;
@@ -685,8 +688,17 @@ const SNIPER_SCRIPT = `(() => {
   if (window.__pkmSniper) return;
   const S = window.__pkmSniper = {
     cfg: { alvos: [], simular: true, intervalo: 30, olheiro: false, consultas: [] },
-    comprados: {}, log: [], nomes: {}, ultimaVista: {}, pendentes: {}, agendados: {}, tentados: {}, repasse: []
+    comprados: {}, log: [], nomes: {}, ultimaVista: {}, pendentes: {}, agendados: {}, tentados: {}, repasse: [],
+    gasto: { dia: '', gold: 0, orb: 0 }
   };
+  // Teto de gasto por dia (20/11/2026, pedido do dono): por conta e por moeda (\`tetoDia\`: { gold, orb }, 0 = sem teto).
+  // Conta o que COMPROU hoje (dia do PC) mais o que está pedido e sem resposta; o pedido que estouraria o teto não sai
+  // (o de item sai com a quantidade que cabe). O gasto do dia vai para o app (S.estado) e volta na config depois de
+  // recarregar a página, e zera sozinho na virada do dia.
+  const hoje = () => new Date().toLocaleDateString('sv');
+  const gastoHoje = m => (S.gasto.dia === hoje() ? Number(S.gasto[m]) || 0 : 0);
+  const reservado = m => Object.values(S.pendentes).filter(p => p.alvo.moeda === m).reduce((t, p) => t + (p.valor || 0), 0);
+  const tetoDe = m => Math.max(0, Number(S.cfg.tetoDia?.[m]) || 0);
   const agora = () => Date.now() + (window.__pkmOffset || 0);
   // Alvo de ITEM: item:moeda (como sempre foi). Alvo de POKEMON: pk:<uid> (cada alvo conta à parte)
   const ehPk = a => a.tipo === 'pokemon';
@@ -763,8 +775,12 @@ const SNIPER_SCRIPT = `(() => {
     relogio = setTimeout(rodar, Math.max(4000, passo));
   }
 
-  S.config = (cfg, comprados, zerar) => {
+  S.config = (cfg, comprados, zerar, gasto) => {
     S.cfg = cfg;
+    if (gasto && gasto.dia === hoje()) {
+      if (S.gasto.dia !== hoje()) S.gasto = { dia: hoje(), gold: 0, orb: 0 };
+      for (const m of ['gold', 'orb']) S.gasto[m] = Math.max(Number(S.gasto[m]) || 0, Number(gasto[m]) || 0);
+    }
     // O que já comprou só cresce: o app manda o que tinha guardado (para a página que acabou de abrir) e a página
     // fica com o maior; o "Zerar comprados" troca de vez. (A cópia do app tem até 30 s de atraso.)
     if (zerar) S.comprados = { ...(comprados || {}) };
@@ -851,12 +867,24 @@ const SNIPER_SCRIPT = `(() => {
   function pedir(alvo, l, q) {
     q = Math.min(q, quantoFalta(alvo));
     if (!(q > 0) || !alvo.ativo) return;
+    const teto = tetoDe(alvo.moeda), preco = Number(l.preco) || 0;
+    if (teto > 0) {
+      const livre = teto - gastoHoje(alvo.moeda) - reservado(alvo.moeda);
+      const cabe = preco > 0 ? Math.floor(livre / preco) : 0;
+      if (cabe < q) {
+        if (cabe < 1 || ehPk(alvo)) {
+          regUmaVez('teto|' + hoje() + '|' + alvo.moeda + '|' + l.id, 'teto do dia: não comprei ' + descrever(alvo, l, q) + ' (gasto hoje ' + gastoHoje(alvo.moeda) + ' de ' + teto + ' ' + moedaTxt(alvo.moeda) + ')');
+          return;
+        }
+        q = cabe;
+      }
+    }
     S.tentados[l.id] = Date.now();
     const desc = descrever(alvo, l, q);
     if (S.cfg.simular) { regUmaVez('si|' + l.id + '|' + l.preco + '|' + q, '[simulação] compraria ' + desc); return; }
     const ok = window.__pkmEnviar?.({ t: 'market.comprar', id: l.id, qtd: q, preco: l.preco, moeda: alvo.moeda, sorteioUi: 1 });
     if (!ok) { reg('sem conexão com o jogo, não pedi ' + desc); return; }
-    S.pendentes[l.id] = { alvo, qtd: q, em: Date.now(), desc };
+    S.pendentes[l.id] = { alvo, qtd: q, em: Date.now(), desc, preco, valor: preco * q };
     setTimeout(() => { delete S.pendentes[l.id]; }, 30000); // sem resposta em 30 s, libera a cota
     reg('pedido: ' + desc);
   }
@@ -866,6 +894,8 @@ const SNIPER_SCRIPT = `(() => {
     if (e.k === 'marketComprado' && p) {
       const q = ehPk(p.alvo) ? 1 : (Number(e.qtd) || p.qtd);
       S.comprados[chave(p.alvo)] = (S.comprados[chave(p.alvo)] || 0) + q;
+      if (S.gasto.dia !== hoje()) S.gasto = { dia: hoje(), gold: 0, orb: 0 };
+      S.gasto[p.alvo.moeda] = (Number(S.gasto[p.alvo.moeda]) || 0) + (p.preco || 0) * q;
       delete S.pendentes[e.id];
       reg('COMPROU ' + p.desc + (e.sorteio ? ' (ganhou o sorteio)' : ''));
     } else if (e.k === 'mktSorteio' && p && (e.fase === 'fim' || e.fim)) {
@@ -879,7 +909,7 @@ const SNIPER_SCRIPT = `(() => {
   };
 
   S.estado = () => ({
-    comprados: S.comprados, log: S.log.slice(-60), pausadoMercado: !!S.pausadoMercado, olheiro: !!S.cfg.olheiro,
+    comprados: S.comprados, gasto: S.gasto.dia === hoje() ? S.gasto : { dia: hoje(), gold: 0, orb: 0 }, log: S.log.slice(-60), pausadoMercado: !!S.pausadoMercado, olheiro: !!S.cfg.olheiro,
     agendados: Object.values(S.agendados).map(x => ({ item: ehPk(x.alvo) ? (x.l.ficha?.nome || nomeAlvo(x.alvo)) : nome(x.alvo.itemId), preco: x.l.preco, libera: x.l.compravelEm })),
     ultimoItem: window.__pkmUltimoItem ? { ...window.__pkmUltimoItem, nome: nome(window.__pkmUltimoItem.itemId) } : null,
     nomesAlvos: Object.fromEntries(S.cfg.alvos.filter(a => !ehPk(a)).map(a => [a.itemId, nome(a.itemId)])),
@@ -938,8 +968,8 @@ function sniperEnviarConfig(so = null, zerar = false) {
     const wc = v?.webContents;
     if (!wc || wc.isDestroyed() || (so != null && i !== so && i !== sniperOlheiro)) return;
     const c = s.contas[i], olheiro = i === sniperOlheiro;
-    const conf = { alvos: c.alvos, simular: c.simular, intervalo: s.intervalo, olheiro, consultas: olheiro ? consultas : [] };
-    wc.executeJavaScript(`window.__pkmSniper?.config(${JSON.stringify(conf)}, ${JSON.stringify(c.comprados || {})}, ${zerar && i === so})`).catch(() => {});
+    const conf = { alvos: c.alvos, simular: c.simular, intervalo: s.intervalo, olheiro, consultas: olheiro ? consultas : [], tetoDia: c.tetoDia || { gold: 0, orb: 0 } };
+    wc.executeJavaScript(`window.__pkmSniper?.config(${JSON.stringify(conf)}, ${JSON.stringify(c.comprados || {})}, ${zerar && i === so}, ${JSON.stringify(c.gasto || null)})`).catch(() => {});
   });
 }
 
@@ -1003,6 +1033,7 @@ async function sniperLer() {
     if (!st) return;
     const c = s.contas[i];
     if (JSON.stringify(st.comprados) !== JSON.stringify(c.comprados)) { c.comprados = st.comprados; mudou = true; }
+    if (st.gasto && JSON.stringify(st.gasto) !== JSON.stringify(c.gasto)) { c.gasto = st.gasto; mudou = true; }
     // O alvo guardado com o nome provisório ("item 70013", de quando o Sniper não sabia o nome dos itens fora do
     // items.json) fica com o nome que o jogo mostra
     for (const a of c.alvos) {
@@ -1067,10 +1098,11 @@ function sniperSalvar(novo) {
     }).filter(a => a.precoMax > 0 && (a.tipo === 'pokemon' || a.itemId));
   }
   if (c && 'simular' in novo) c.simular = !!novo.simular;
+  if (c && novo.tetoDia && typeof novo.tetoDia === 'object') c.tetoDia = { gold: num(novo.tetoDia.gold, 0, 1e15), orb: num(novo.tetoDia.orb, 0, 1e15) };
   if ('intervalo' in (novo ?? {})) s.intervalo = num(novo.intervalo, 20, 600);
   if (c && novo.zerar) c.comprados = {};
   saveCfg();
-  if (c) appLog(`sniper ${cfg.names[i]}: ${c.simular ? 'SIMULAÇÃO' : 'COMPRA LIGADA'}, ${c.alvos.filter(a => a.ativo).length} alvos ativos (${c.alvos.filter(a => a.ativo && a.tipo === 'pokemon').length} de pokémon), a cada ${s.intervalo}s`);
+  if (c) appLog(`sniper ${cfg.names[i]}: ${c.simular ? 'SIMULAÇÃO' : 'COMPRA LIGADA'}, ${c.alvos.filter(a => a.ativo).length} alvos ativos (${c.alvos.filter(a => a.ativo && a.tipo === 'pokemon').length} de pokémon), a cada ${s.intervalo}s, teto do dia ${c.tetoDia?.gold || 'sem'} coins e ${c.tetoDia?.orb || 'sem'} gemas`);
   else appLog(`sniper: a cada ${s.intervalo}s`);
   sniperEnviarConfig(i, !!(c && novo.zerar));
   sniperLer();
@@ -2931,7 +2963,6 @@ function tcEscolher(fila) {
 }
 const tcSituacao = s => { tc.situacao = s; };
 async function tcTick() {
-  return; // edição de venda: a caça do Top Catch é só do app pessoal, por enquanto
   const c = tcCfg();
   if (!c.ligado || tc.ocupado) return;
   tc.ocupado = true;
@@ -3035,6 +3066,7 @@ function tcSalvar(novo) {
   tcEnviar();
 }
 function abrirTopCatch() {
+  if (!licenca.premium()) return licenca.pedirPremium('A 🏆 Caça do Top Catch');
   if (tcWin && !tcWin.isDestroyed()) { if (tcWin.isMinimized()) tcWin.restore(); return tcWin.focus(); }
   tcWin = new BrowserWindow({
     width: 760, height: 860, parent: win, autoHideMenuBar: true, backgroundColor: '#151515',
@@ -3048,6 +3080,182 @@ function abrirTopCatch() {
 }
 ipcMain.on('tc:abrir', () => abrirTopCatch());
 ipcMain.on('tc:salvar', (_e, novo) => tcSalvar(novo));
+
+// ---------- 🎨 Temas: as cores do jogo em cada conta (20/11/2026, pedido do dono) ----------
+// O visual do jogo sai quase todo de uma paleta de variáveis de CSS (no estilo.css, 223 cores e mais de 10 mil usos).
+// O tema troca as famílias principais (o fundo, a madeira dos painéis, o destaque roxo e o xadrez do fundo da página)
+// a partir de 3 cores, movendo cada cor da família junto com a cor-base dela (o tom e a saturação giram com a base; o
+// claro e o escuro andam com ela, menos os textos claros, que ficam claros para continuar legíveis). Os tons escuros
+// cor de vinho escritos direto no código (sem variável) também mudam: a página lê as regras do próprio estilo do jogo e
+// sobrepõe só essas cores. Nada vai para o servidor: só muda o que aparece na tela, e "Original" tira tudo.
+// Se o jogo renomear as variáveis, o tema para de pegar e volta o visual original, sem quebrar nada.
+function temaInstalar() {
+  if (window.__pkmTema) return;
+  const FAM = {
+    fundo: { base: '--vao', vars: ['--vao', '--vao2', '--vao-luz', '--vao-dim', '--barra-vazia'] },
+    painel: { base: '--mad', vars: ['--mad-linha', '--mad-base', '--mad', '--mad-esc', '--mad-quente', '--mad-luz', '--mad-luz2', '--sobre-mad', '--sobre-mad-dim'] },
+    destaque: { base: '--rx', vars: ['--rx', '--rx-esc', '--rx-clr', '--rx-rosa', '--rx-luz'] },
+    xadrez: { base: '--xadrez-esc', vars: ['--xadrez-esc', '--xadrez-clr'] }
+  };
+  const lim = (x, a, b) => Math.min(b, Math.max(a, x));
+  const deHex = h => {
+    h = String(h || '').trim().replace('#', '');
+    if (h.length === 3) h = h.split('').map(c => c + c).join('');
+    if (!/^[0-9a-f]{6}/i.test(h)) return null;
+    return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
+  };
+  const paraHsl = ([r, g, b]) => {
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+    if (!d) return { h: 0, s: 0, l };
+    const s = d / (1 - Math.abs(2 * l - 1));
+    let h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return { h: (h * 60 + 360) % 360, s, l };
+  };
+  const deHsl = ({ h, s, l }) => {
+    const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = l - c / 2;
+    const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+    return [r + m, g + m, b + m].map(v => Math.round(lim(v, 0, 1) * 255));
+  };
+  const hexDe = rgb => '#' + rgb.map(v => v.toString(16).padStart(2, '0')).join('');
+  // Move uma cor da família junto com a base dela (de -> para). O tom fica perto do escolhido: a diferença de tom de
+  // cada cor para a base entra só em parte (a madeira vai do vinho ao laranja; girada inteira, sairia do tom escolhido)
+  const mover = (cor, de, para) => {
+    const dif = ((cor.h - de.h + 540) % 360) - 180;
+    const h = (para.h + dif * 0.25 + 360) % 360;
+    const s = lim(de.s > 0.04 ? cor.s * (para.s / de.s) : para.s, 0, 1);
+    const l = cor.l >= 0.7 ? cor.l : lim(cor.l + para.l - de.l, 0.02, 0.9);
+    return { h, s, l };
+  };
+  // As cores originais, lidas uma vez (antes de qualquer tema)
+  let orig = null, fixas = null;
+  const lerOrig = () => {
+    const cs = getComputedStyle(document.documentElement);
+    const o = {};
+    for (const f of Object.values(FAM)) for (const v of f.vars) { const c = deHex(cs.getPropertyValue(v)); if (c) o[v] = paraHsl(c); }
+    return o;
+  };
+  // As cores cor de vinho escuras escritas direto nas regras do jogo (sem variável): guarda onde estão
+  const ehVinhoEscuro = c => c.l < 0.3 && c.s > 0.15 && (c.h >= 290 || c.h <= 25);
+  const RGB = /rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)\s*(?:[,/]\s*([\d.]+%?)\s*)?\)/g;
+  const lerFixas = () => {
+    const lista = [];
+    const andar = (regras, midia) => {
+      for (const r of regras) {
+        if (r.cssRules && r.media) { andar(r.cssRules, r.media.mediaText); continue; }
+        if (!r.style || !r.selectorText) continue;
+        for (let k = 0; k < r.style.length; k++) {
+          const p = r.style[k], v = r.style.getPropertyValue(p);
+          if (!v || v.indexOf('rgb') < 0 || v.indexOf('var(') >= 0) continue;
+          let tem = false;
+          v.replace(RGB, (_t, a, b, c) => { if (ehVinhoEscuro(paraHsl([a / 255, b / 255, c / 255]))) tem = true; return _t; });
+          if (tem) lista.push({ sel: r.selectorText, p, v, midia });
+        }
+      }
+    };
+    for (const folha of document.styleSheets) {
+      if (folha.ownerNode?.id === 'pkm-tema') continue;
+      try { andar(folha.cssRules, ''); } catch {}
+    }
+    return lista;
+  };
+  const montar = paleta => {
+    const para = {};
+    for (const [nome, cor] of Object.entries(paleta)) { const c = deHex(cor); if (c) para[nome] = paraHsl(c); }
+    if (!para.fundo || !para.painel || !para.destaque) return '';
+    // Fundo e painel ficam escuros, para os textos claros do jogo continuarem legíveis
+    para.fundo.l = Math.min(para.fundo.l, 0.3);
+    para.painel.l = Math.min(para.painel.l, 0.55);
+    para.xadrez = { h: para.fundo.h, s: Math.min(1, para.fundo.s + 0.1), l: Math.min(para.fundo.l + 0.16, 0.5) };
+    const linhas = [];
+    for (const [nome, f] of Object.entries(FAM)) {
+      const de = orig[f.base], alvo = para[nome];
+      if (!de || !alvo) continue;
+      for (const v of f.vars) if (orig[v]) linhas.push(`${v}: ${hexDe(deHsl(mover(orig[v], de, alvo)))};`);
+    }
+    let css = `:root:root { ${linhas.join(' ')} }\n`;
+    const deF = orig[FAM.fundo.base];
+    if (deF) for (const x of fixas) {
+      const nv = x.v.replace(RGB, (t, a, b, c, al) => {
+        const hsl = paraHsl([a / 255, b / 255, c / 255]);
+        if (!ehVinhoEscuro(hsl)) return t;
+        const [r, g, bb] = deHsl(mover(hsl, deF, para.fundo));
+        return al != null ? `rgba(${r}, ${g}, ${bb}, ${al})` : `rgb(${r}, ${g}, ${bb})`;
+      });
+      const regra = `${x.sel} { ${x.p}: ${nv}; }`;
+      css += x.midia ? `@media ${x.midia} { ${regra} }\n` : regra + '\n';
+    }
+    return css;
+  };
+  let pedido = null, esperando = false;
+  window.__pkmTema = paleta => {
+    pedido = paleta;
+    if (document.readyState !== 'complete') {
+      if (!esperando) { esperando = true; window.addEventListener('load', () => { esperando = false; window.__pkmTema(pedido); }, { once: true }); }
+      return;
+    }
+    let el = document.getElementById('pkm-tema');
+    if (!paleta) { el?.remove(); return; }
+    if (!orig) { el?.remove(); orig = lerOrig(); fixas = lerFixas(); }
+    if (!el) { el = document.createElement('style'); el.id = 'pkm-tema'; document.documentElement.appendChild(el); }
+    el.textContent = montar(paleta);
+    window.__pkmTemaInfo = { variaveis: Object.keys(orig).length, fixas: fixas.length };
+  };
+}
+const TEMAS = [
+  { id: 'original', nome: 'Original' },
+  { id: 'grafite', nome: 'Grafite', fundo: '#202227', painel: '#5c616e', destaque: '#5b8def' },
+  { id: 'azul', nome: 'Azul noite', fundo: '#131b2e', painel: '#3d5fa3', destaque: '#3fb6ff' },
+  { id: 'verde', nome: 'Verde floresta', fundo: '#14231a', painel: '#4d8653', destaque: '#e0b03a' },
+  { id: 'roxo', nome: 'Roxo', fundo: '#201630', painel: '#7550ad', destaque: '#ff7ac8' },
+  { id: 'cobre', nome: 'Cobre', fundo: '#2a1a10', painel: '#b06a35', destaque: '#3fc1a5' },
+  { id: 'meu', nome: 'Personalizado' }
+];
+const temasCfg = () => {
+  const t = (cfg.temas ??= {});
+  if (!Array.isArray(t.contas)) t.contas = [];
+  for (let i = 0; i < TOTAL; i++) if (!TEMAS.some(x => x.id === t.contas[i])) t.contas[i] = 'original';
+  t.personalizado = { fundo: '#162229', painel: '#3f7d8f', destaque: '#f0a03c', ...(t.personalizado || {}) };
+  return t;
+};
+function temaPaleta(i) {
+  const t = temasCfg(), id = t.contas[i];
+  if (id === 'meu') return t.personalizado;
+  const x = TEMAS.find(y => y.id === id);
+  return x && x.fundo ? { fundo: x.fundo, painel: x.painel, destaque: x.destaque } : null;
+}
+function temaAplicar(i) {
+  if (!licenca.premium()) return; // plano grátis: nenhum script nosso no jogo
+  const wc = views[i]?.webContents;
+  if (!wc || wc.isDestroyed() || !/^https:\/\/pokeidle\.io\//.test(wc.getURL())) return;
+  wc.executeJavaScript(`(${temaInstalar.toString()})(); window.__pkmTema(${JSON.stringify(temaPaleta(i))}); true`).catch(() => {});
+}
+let temaWin = null;
+const temaEnviar = () => { if (temaWin && !temaWin.isDestroyed()) temaWin.webContents.send('temastate', { cfg: temasCfg(), temas: TEMAS, nomes: cfg.names }); };
+function abrirTemas() {
+  if (!licenca.premium()) return licenca.pedirPremium('Os 🎨 Temas');
+  if (temaWin && !temaWin.isDestroyed()) { if (temaWin.isMinimized()) temaWin.restore(); return temaWin.focus(); }
+  temaWin = new BrowserWindow({
+    width: 620, height: 640, parent: win, autoHideMenuBar: true, backgroundColor: '#151515',
+    title: 'Temas do jogo',
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true }
+  });
+  temaWin.on('page-title-updated', e => e.preventDefault());
+  temaWin.loadFile(path.join(__dirname, 'temas.html'));
+  temaWin.webContents.on('did-finish-load', temaEnviar);
+  temaWin.on('closed', () => { temaWin = null; });
+}
+function temaSalvar(novo) {
+  const t = temasCfg();
+  if (Array.isArray(novo?.contas)) for (let i = 0; i < TOTAL; i++) if (TEMAS.some(x => x.id === novo.contas[i])) t.contas[i] = novo.contas[i];
+  const cor = x => (/^#[0-9a-f]{6}$/i.test(String(x || '')) ? String(x).toLowerCase() : null);
+  if (novo?.personalizado) for (const k of ['fundo', 'painel', 'destaque']) { const c = cor(novo.personalizado[k]); if (c) t.personalizado[k] = c; }
+  saveCfg();
+  appLog(`temas: ${t.contas.map((id, i) => `${cfg.names[i]} ${TEMAS.find(x => x.id === id)?.nome}`).join(', ')}`);
+  for (let i = 0; i < TOTAL; i++) temaAplicar(i);
+  temaEnviar();
+}
+ipcMain.on('tema:abrir', () => abrirTemas());
+ipcMain.on('tema:salvar', (_e, novo) => temaSalvar(novo));
 
 // ---------- 🏦 Caixa do projeto: a carteira do jogo na rede Solana ----------
 // Pedido de 31/10/2026: "quero saber quando tiver saindo muito capital, para eu me precaver de futura liquidação ou
@@ -4395,6 +4603,7 @@ function createGameView(i) {
     wc.executeJavaScript(WS_ESCUTA + HUNT_ESCUTA + FICHA_PRECO_SCRIPT).catch(() => {});
     wc.executeJavaScript((i === PRECO_CONTA ? PEDIR_SCRIPT : '') + SNIPER_SCRIPT).then(() => sniperEnviarConfig(i)).catch(() => {});
     if (i === TW_AUTO_CONTA) wc.executeJavaScript(TELA_PONTOS_SCRIPT).then(twTelaEnviar).catch(() => {});
+    temaAplicar(i); // 🎨 o tema da conta (a página espera o estilo do jogo carregar)
   });
   // O Sniper da conta que olha o Mercado avisa pelo console quando tem anúncio para repassar às outras (sniperRepassar),
   // e a Conta 1 avisa quando a tela de bônus da Twitch ou da Kick abre (twTelaAberta)
@@ -4500,6 +4709,7 @@ function createWindow() {
   win.on('unresponsive', () => appLog('janela principal sem resposta'));
   win.on('responsive', () => appLog('janela principal voltou a responder'));
   bandeja.ligar(win, { config: cfg, salvarConfig: saveCfg, appLog });
+  ajuda.ligar({ janela: win, licenca, appLog }); // ❓ tutorial, novidades (abrem sozinhas na versão nova) e verificar atualizações
   win.on('close', e => {
     if (bandeja.segurarFechar(e)) return;
     appLog('janela principal fechando');
@@ -4615,7 +4825,7 @@ function createWindow() {
 // 30 min e, daí em diante, de hora em hora. Não mexe: na conta que nunca conectou (tela de login), sem internet no PC,
 // e quando o jogo fechou a conexão com o código 4001 (a conta entrou em outro lugar: recarregar derrubaria quem
 // entrou, e os dois ficariam se derrubando). Avisa pelo Windows quando a 1ª recarga não resolve e quando a conta volta.
-// Desliga com "vigia": { "ligado": false } no config.json.
+// Desliga com "vigia": { "ligado": false } no config.json (só a da sessão zumbi, mais abaixo: "zumbi": false).
 const VIGIA_TESTE = process.env.PKM_VIGIA_TESTE === '1'; // o teste isolado encurta as esperas
 const VIGIA_CADA_MS = VIGIA_TESTE ? 300 : 60000;
 const VIGIA_FORA_MS = VIGIA_TESTE ? 1500 : 3 * 60000;
@@ -4623,6 +4833,43 @@ const VIGIA_ESPERAS_MS = VIGIA_TESTE ? [1500, 3000, 6000] : [3 * 60000, 10 * 600
 const VIGIA_LOGIN_EXTERNO = 4001;
 const vigiaNovo = () => ({ jaConectou: false, foraDesde: 0, tentativas: 0, proxima: 0, avisou: false, externo: false });
 const vigia = Array.from({ length: TOTAL }, vigiaNovo);
+
+// ---- A sessão zumbi (20/11/2026): o WebSocket continua aberto e a conta está numa hunt, mas o jogo parou de mandar o
+// combate (a conta "caça" na tela e não ganha nada). O vigia de conexão não pegava, porque a conexão parece boa. Agora,
+// a conta que JÁ recebeu combate nesta abertura do app e fica 5 min numa hunt sem nenhum pedaço dele é recarregada; se
+// não voltar, de novo depois de 5, 10 e 30 min e, daí em diante, de hora em hora. Não conta o tempo no Centro Pokémon
+// nem fora de hunt (aí o jogo não manda combate mesmo), e a conta que nunca recebeu combate não é mexida (um modo do
+// jogo que não mande combate não vira recarga a cada 5 min). Avisa pelo Windows na 2ª recarga e quando volta.
+const ZUMBI_MS = VIGIA_TESTE ? 1500 : 5 * 60000;
+const ZUMBI_ESPERAS_MS = VIGIA_TESTE ? [1500, 3000, 6000] : [5, 10, 30, 60].map(m => m * 60000);
+const zumbiNovo = () => ({ viuCombate: false, cacaDesde: 0, tentativas: 0, proxima: 0, avisou: false });
+const zumbi = Array.from({ length: TOTAL }, zumbiNovo);
+function vigiaZumbi(i, wc, r, agora) {
+  const z = zumbi[i];
+  if (r.bat) z.viuCombate = true;
+  if (!r.caca) { z.cacaDesde = 0; return; }
+  if (!z.cacaDesde) z.cacaDesde = agora;
+  const quieto = agora - Math.max(r.bat || 0, r.entrou || 0, z.cacaDesde);
+  if (quieto < ZUMBI_MS) {
+    if (z.tentativas && r.bat > agora - ZUMBI_MS) {
+      appLog(`vigia: ${cfg.names[i]} voltou a receber o combate depois de ${z.tentativas} recarga(s) (sessão zumbi)`);
+      if (z.avisou) vigiaAvisar(i, 'O combate voltou nesta conta.');
+      Object.assign(z, { tentativas: 0, proxima: 0, avisou: false });
+    }
+    return;
+  }
+  if (!z.viuCombate || agora < z.proxima) return;
+  z.tentativas++;
+  z.proxima = agora + ZUMBI_ESPERAS_MS[Math.min(z.tentativas, ZUMBI_ESPERAS_MS.length) - 1];
+  const min = Math.max(1, Math.round(quieto / 60000));
+  appLog(`vigia: ${cfg.names[i]} conectada e numa hunt, mas sem combate há ${min} min (sessão zumbi); recarreguei (tentativa ${z.tentativas})`);
+  if (z.tentativas === 2 && !z.avisou) {
+    z.avisou = true;
+    vigiaAvisar(i, `A conta está conectada mas parou de caçar há ${min} min. Já recarreguei uma vez e não voltou; continuo tentando.`);
+  }
+  z.cacaDesde = 0;
+  wc.reload();
+}
 
 // ---- O jogo que não abre (18/11/2026, ideia do PokeIdle Deck): a página carrega, mas o jogo fica na tela de abertura
 // (a barra de carga), sem conectar nem chegar ao login; ou a página nem carregou (site fora, erro de rede). O vigia de
@@ -4701,7 +4948,7 @@ async function vigiaTick() {
       let r = null;
       try {
         r = await Promise.race([
-          wc.executeJavaScript('window.__pkmWs ? { con: window.__pkmSock?.readyState === 1, code: window.__pkmFechou?.code ?? 0 } : null'),
+          wc.executeJavaScript('window.__pkmWs ? { con: window.__pkmSock?.readyState === 1, code: window.__pkmFechou?.code ?? 0, bat: window.__pkmBatalhaEm || 0, entrou: window.__pkmEntrouEm || 0, caca: !!(window.__pkmEu && window.__pkmEu.huntSlug && !window.__pkmEu.noCentro) } : null'),
           new Promise(res => setTimeout(res, 5000, null))
         ]);
       } catch {}
@@ -4711,6 +4958,7 @@ async function vigiaTick() {
         if (v.tentativas || v.externo) appLog(`vigia: ${cfg.names[i]} voltou a conectar depois de ${min()} min${v.tentativas ? ` (${v.tentativas} recarga(s))` : ''}`);
         if (v.avisou) vigiaAvisar(i, `Voltou a conectar depois de ${min()} min.`);
         Object.assign(v, vigiaNovo(), { jaConectou: true });
+        if (cfg.vigia?.zumbi !== false) vigiaZumbi(i, wc, r, agora);
         continue;
       }
       if (!v.jaConectou) continue;

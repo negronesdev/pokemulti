@@ -67,6 +67,13 @@
       <span class="mut">Consultar cada alvo a cada</span>
       <input type="number" id="intervalo" min="20" max="600"> <span class="mut">segundos (mínimo 20; vale para as 4 contas)</span>
     </div>
+    <div class="linha" style="margin-top:8px">
+      <span class="mut" id="tetoTit">Teto de gasto por dia desta conta</span>
+      <input type="number" id="tetoGold" min="0" title="0 = sem teto"> <span class="mut">coins</span>
+      <input type="number" id="tetoOrb" min="0" title="0 = sem teto"> <span class="mut">gemas</span>
+      <span class="mut">(0 = sem teto)</span>
+    </div>
+    <div id="gastoHoje" class="mut" style="margin-top:4px"></div>
     <div id="ritmo" class="mut" style="margin-top:4px"></div>
     <div id="pausa" class="aviso" style="margin-top:6px;display:none"></div>
   </div>
@@ -205,6 +212,14 @@
     $('modo').className = 'modo ' + (cfg.simular ? 'sim' : 'real');
     $('trocarModo').textContent = cfg.simular ? 'Ligar compra de verdade' : 'Voltar para simulação';
     if (document.activeElement !== $('intervalo')) $('intervalo').value = cg.intervalo;
+    // Teto do dia: o que a conta já gastou hoje vem da página dela (ou o guardado, com a página fechada)
+    const teto = cfg.tetoDia || { gold: 0, orb: 0 };
+    if (document.activeElement !== $('tetoGold')) $('tetoGold').value = teto.gold || 0;
+    if (document.activeElement !== $('tetoOrb')) $('tetoOrb').value = teto.orb || 0;
+    $('tetoTit').textContent = `Teto de gasto por dia da ${nomeDa(conta)}`;
+    const hoje = new Date().toLocaleDateString('sv'), g = [st?.gasto, cfg.gasto].find(x => x && x.dia === hoje) || { gold: 0, orb: 0 };
+    const parte = (m, nome) => `${fmt(g[m] || 0)}${teto[m] > 0 ? ' de ' + fmt(teto[m]) : ''} ${nome}${teto[m] > 0 && (g[m] || 0) >= teto[m] ? ' (teto atingido)' : ''}`;
+    $('gastoHoje').textContent = `Gasto hoje pelo Sniper: ${parte('gold', 'coins')} · ${parte('orb', 'gemas')}`;
     // Um pedido a cada 4 s no mínimo: com muitas consultas, cada uma volta mais devagar que o intervalo
     $('ritmo').textContent = nConsultas ? `Agora: ${nConsultas} consulta${nConsultas === 1 ? '' : 's'} (os alvos ligados das 4 contas, sem repetir), cada uma a cada ~${Math.max(cg.intervalo, 4 * nConsultas)} s.` : '';
     const pausa = sts[olheiro]?.pausadoMercado && cfg.alvos.some(a => ehPk(a) && a.ativo);
@@ -346,6 +361,7 @@
     salvar({ simular: !C().simular });
   };
   $('intervalo').onchange = () => api.snSalvar({ intervalo: Number($('intervalo').value) });
+  $('tetoGold').onchange = $('tetoOrb').onchange = () => salvar({ tetoDia: { gold: Number($('tetoGold').value) || 0, orb: Number($('tetoOrb').value) || 0 } });
   $('zerar').onclick = () => { if (confirm(`Zerar a contagem de comprados da ${nomeDa(conta)}?`)) salvar({ zerar: true }); };
 
   api.onSnState(s => {

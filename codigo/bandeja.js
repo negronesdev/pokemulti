@@ -77,6 +77,9 @@ function montarMenu() {
     { label: 'O X manda para a bandeja (não fecha)', type: 'checkbox', checked: o.fechar, click: i => { o.fechar = i.checked; salvar(); } },
     { label: 'Abrir junto com o Windows', type: 'checkbox', checked: abreComWindows(), click: i => mudarComWindows(i.checked) },
     { type: 'separator' },
+    { label: 'Ajuda e novidades', click: () => { mostrar(); require('./ajuda.js').abrir('novidades'); } },
+    { label: 'Verificar atualizações', click: () => { mostrar(); require('./ajuda.js').abrir('novidades'); } },
+    { type: 'separator' },
     { label: 'Sair do PokeMulti', click: sair }
   ]));
 }

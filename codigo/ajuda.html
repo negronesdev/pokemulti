@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Ajuda do PokeMulti</title>
+<style>
+  :root { --bg:#151515; --box:#1f1f23; --linha:#2a2a30; --fg:#eee; --mut:#a3a3ad; --roxo:#7f57ea; --ok:#3fb950; --ambar:#e3b341; --erro:#f0544f; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:14px/1.5 system-ui, "Segoe UI", sans-serif; }
+  body { display:flex; flex-direction:column; }
+  header { padding:14px 16px 0; border-bottom:1px solid var(--linha); }
+  h1 { font-size:20px; margin:0 0 10px; }
+  .atualizar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:var(--box); border:1px solid var(--linha); border-radius:10px; padding:10px 12px; margin-bottom:12px; }
+  .atualizar .sp { flex:1; }
+  #verTxt { color:var(--mut); }
+  #verTxt.ok { color:var(--ok); } #verTxt.nova { color:var(--ambar); font-weight:600; } #verTxt.erro { color:var(--erro); }
+  button { height:32px; padding:0 14px; background:#2a2a30; color:#fff; border:1px solid #444; border-radius:7px; font:inherit; cursor:pointer; }
+  button:hover { border-color:var(--roxo); }
+  button.prim { background:var(--roxo); border-color:var(--roxo); }
+  button:disabled { opacity:.5; cursor:default; }
+  nav { display:flex; gap:4px; }
+  nav button { border:0; border-bottom:3px solid transparent; border-radius:0; background:transparent; height:38px; color:var(--mut); font-weight:600; }
+  nav button.on { color:#fff; border-bottom-color:var(--roxo); }
+  main { flex:1; overflow-y:auto; padding:14px 16px 24px; }
+  .aba { display:none; } .aba.on { display:block; }
+  .versao { background:var(--box); border:1px solid var(--linha); border-radius:10px; padding:12px 14px; margin-bottom:10px; }
+  .versao.atual { border-color:var(--roxo); }
+  .versao h2 { font-size:15px; margin:0 0 6px; display:flex; gap:8px; align-items:baseline; }
+  .versao h2 small { color:var(--mut); font-weight:400; font-size:12px; }
+  .selo { font-size:11px; background:var(--roxo); color:#fff; padding:1px 7px; border-radius:9px; font-weight:600; }
+  .item { margin:6px 0 0; } .item b { color:#d9cbff; }
+  .grupo { font-size:13px; color:#cdb6ff; text-transform:uppercase; letter-spacing:.04em; margin:18px 0 8px; }
+  .grupo:first-child { margin-top:0; }
+  .ferr { display:grid; grid-template-columns:38px 1fr; gap:4px 10px; background:var(--box); border:1px solid var(--linha); border-radius:10px; padding:10px 12px; margin-bottom:8px; }
+  .ferr .ico { font-size:22px; line-height:1.2; text-align:center; }
+  .ferr h3 { margin:0; font-size:15px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .tag { font-size:11px; padding:0 7px; border-radius:9px; font-weight:600; }
+  .tag.p { background:#3a2f12; color:var(--ambar); } .tag.g { background:#13301c; color:var(--ok); }
+  .ferr p { margin:2px 0 0; color:#d4d4da; }
+  .ferr ol { margin:4px 0 0; padding-left:18px; color:#d4d4da; }
+  .dica { color:var(--mut); font-size:13px; }
+  kbd { background:#2a2a30; border:1px solid #444; border-radius:4px; padding:0 5px; font:12px ui-monospace, Consolas, monospace; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Ajuda do PokeMulti</h1>
+  <div class="atualizar">
+    <span>Versão <b id="versao">…</b></span>
+    <span id="verTxt"></span>
+    <span class="sp"></span>
+    <button id="atualizar" class="prim" style="display:none">⬆ Atualizar agora</button>
+    <button id="verificar">Verificar atualizações</button>
+  </div>
+  <nav>
+    <button data-aba="novidades">✨ Novidades</button>
+    <button data-aba="ferramentas">📘 Tutorial das ferramentas</button>
+  </nav>
+</header>
+<main>
+  <section class="aba" id="aba-novidades"></section>
+
+  <section class="aba" id="aba-ferramentas">
+    <p class="dica">Os botões ficam na barra de cima do PokeMulti. Passe o mouse em cima de qualquer botão para ver o que ele faz. Os marcados com <span class="tag p">Premium</span> funcionam nos 7 dias grátis e depois com a key; os <span class="tag g">Grátis</span> funcionam sempre.</p>
+
+    <div class="grupo">Primeiros passos</div>
+    <div class="ferr"><div class="ico">👤</div><div><h3>As 4 contas <span class="tag g">Grátis</span></h3>
+      <p>Cada aba no alto é uma conta, com o login separado. Clique numa aba e entre no jogo como no navegador. O login fica guardado no seu PC.</p>
+      <p>Clique com o botão direito numa aba para renomear a conta.</p></div></div>
+    <div class="ferr"><div class="ico">🔑</div><div><h3>Importar login <span class="tag g">Grátis</span></h3>
+      <p>Se o login com o Google não abrir dentro do app: entre pelo Chrome e traga o login para a conta selecionada.</p></div></div>
+    <div class="ferr"><div class="ico">⊞</div><div><h3>Ver as 4 <span class="tag g">Grátis</span></h3>
+      <p>Mostra as 4 contas ao mesmo tempo (<kbd>Ctrl</kbd>+<kbd>G</kbd>). Clique num quadro para selecionar aquela conta. <b>−</b> e <b>+</b> diminuem e aumentam o jogo nos quadros (<kbd>Ctrl</kbd>+<kbd>-</kbd> e <kbd>Ctrl</kbd>+<kbd>+</kbd>).</p></div></div>
+    <div class="ferr"><div class="ico">⟳</div><div><h3>Recarregar <span class="tag g">Grátis</span></h3>
+      <p>O primeiro ⟳ recarrega a conta selecionada (<kbd>F5</kbd>); o segundo, as 4.</p></div></div>
+
+    <div class="grupo">Deixar o PC leve</div>
+    <div class="ferr"><div class="ico">🎞</div><div><h3>Quadros por segundo <span class="tag g">Grátis</span></h3>
+      <p>Quantos quadros por segundo as contas que você não está vendo desenham. Menos quadros, menos processador. A caçada não muda, só a animação.</p></div></div>
+    <div class="ferr"><div class="ico">🔇</div><div><h3>Mudo <span class="tag g">Grátis</span></h3><p>Silencia as contas que não estão na tela.</p></div></div>
+    <div class="ferr"><div class="ico">🐢</div><div><h3>Economia extra <span class="tag g">Grátis</span></h3>
+      <p>O que ninguém vê para de desenhar: as contas escondidas, os chats escondidos e tudo com o app minimizado. O jogo continua caçando; só a tela para.</p></div></div>
+    <div class="ferr"><div class="ico">🍃</div><div><h3>Ultra leve <span class="tag g">Grátis</span></h3>
+      <p>O mínimo de processador e memória: tudo da Economia extra, mais o "movimento reduzido" do próprio jogo (sem chuva, brilhos e animações) e a recarga da página escondida que inchar de memória.</p></div></div>
+
+    <div class="grupo">Ferramentas</div>
+    <div class="ferr"><div class="ico">🎯</div><div><h3>Sniper do Mercado <span class="tag p">Premium</span></h3>
+      <p>Cada conta compra sozinha os itens e pokémon da lista dela no Mercado (RMT), até o preço máximo que você definir.</p>
+      <ol><li>Abra um item no Mercado do jogo e clique em "+ Adicionar" na janela do Sniper (ou adicione um pokémon com os filtros).</li>
+        <li>Defina o preço máximo por unidade e quantos comprar.</li>
+        <li>Se quiser, ponha um teto de gasto por dia, em coins e em gemas.</li>
+        <li>Ele começa em <b>simulação</b>: só anota o que compraria. Quando conferir, clique em "Ligar compra de verdade".</li></ol>
+      <p class="dica">Compra feita não volta. Anúncio novo fica retido pelo jogo e vai a sorteio: o Sniper entra no sorteio como qualquer jogador.</p></div></div>
+    <div class="ferr"><div class="ico">📈</div><div><h3>Monitor de Preços <span class="tag p">Premium</span></h3>
+      <p>Guarda os preços do Mercado a cada 6 horas e mostra num gráfico o que sobe e o que desce. Avisa as oportunidades: o menor anúncio bem abaixo da média de venda.</p></div></div>
+    <div class="ferr"><div class="ico">🐉</div><div><h3>Monitor de Pokémons <span class="tag p">Premium</span></h3>
+      <p>As vendas reais de pokémon no Mercado, o preço por nota e as pechinchas, lidas pela Conta 1.</p></div></div>
+    <div class="ferr"><div class="ico">💲</div><div><h3>Precificador <span class="tag p">Premium</span></h3>
+      <p>Quanto pedir, em gemas, por um pokémon das suas contas ou por uma ficha do jogo, com três preços: Vender rápido, Preço justo e Esperar. Usa as vendas guardadas pelo Monitor de Pokémons.</p></div></div>
+    <div class="ferr"><div class="ico">💰</div><div><h3>Economia do RMT <span class="tag p">Premium</span></h3>
+      <p>A cotação gema ⇄ coin, as melhores rotas de conversão, os ciclos e os flips, com os dados que o app já coleta.</p></div></div>
+    <div class="ferr"><div class="ico">🛒</div><div><h3>Reposição automática <span class="tag p">Premium</span></h3>
+      <p>Compra bolas, poções e revives na loja do jogo (em coins) quando o estoque de uma conta cai abaixo do número que você escolher, até o total que você definir. Tem teto de gasto por dia e começa desligada.</p></div></div>
+    <div class="ferr"><div class="ico">🗺</div><div><h3>Melhor hunt <span class="tag p">Premium</span></h3>
+      <p>As hunts que mais rendem para o pokémon em campo de cada conta (XP, ouro e risco), simulando a luta com as regras do jogo.</p></div></div>
+    <div class="ferr"><div class="ico">🏆</div><div><h3>Caça do Top Catch <span class="tag p">Premium</span></h3>
+      <p>Numa conta, vai de hunt em hunt atrás das espécies que ainda faltam no Top Catch da semana, primeiro as hunts com mais espécies faltando.</p>
+      <ol><li>Escolha a conta e o tempo máximo em cada hunt.</li>
+        <li>Ligue o "Lançar sem parar" do VIP no jogo: quem captura é o próprio jogo.</li>
+        <li>Marque "Ligada" e acompanhe a fila e o registro na janela.</li></ol>
+      <p class="dica">Ela só troca de hunt com a trava do combate livre (a do "Ir para o Centro Pokemon"). Se o pokémon cair numa hunt, ela pula essa hunt e avisa. Enquanto estiver ligada, não troque de hunt na mão nessa conta.</p></div></div>
+    <div class="ferr"><div class="ico">🎨</div><div><h3>Temas <span class="tag p">Premium</span></h3>
+      <p>Muda as cores do jogo em cada conta: Grafite, Azul noite, Verde floresta, Roxo, Cobre ou Personalizado (você escolhe fundo, painéis e destaque). "Uma cor por conta" põe uma cor diferente em cada uma. Só muda a sua tela; pokémon, mapas e ícones ficam como são.</p></div></div>
+    <div class="ferr"><div class="ico">🔍</div><div><h3>Pokédex do Mini Games <span class="tag p">Premium</span></h3>
+      <p>As sombras de todas as espécies do jogo, filtradas pelas pistas que você marcar, para acertar o "quem é esse pokémon". Não conversa com o jogo.</p></div></div>
+    <div class="ferr"><div class="ico">📺</div><div><h3>Lives da Twitch e da Kick <span class="tag p">Premium</span></h3>
+      <p>O painel de lives da conta selecionada (<kbd>Ctrl</kbd>+<kbd>T</kbd>): entre na Twitch e na Kick uma vez e deixe as lives do jogo tocando para ganhar os bônus. O vídeo continua rodando mesmo nos modos leves, porque é ele que dá os pontos.</p></div></div>
+    <div class="ferr"><div class="ico">🏦</div><div><h3>Caixa do projeto <span class="tag p">Premium</span></h3>
+      <p>A carteira do jogo na rede Solana, de onde saem os saques. Lê as transações a cada 10 minutos (dados públicos) e avisa quando sai dinheiro que não é saque, quando o caixa cai rápido ou quando os saques param.</p></div></div>
+
+    <div class="grupo">Rodando sozinho</div>
+    <div class="ferr"><div class="ico">🛟</div><div><h3>Vigias das contas <span class="tag p">Premium</span></h3>
+      <p>Recarregam sozinhas a conta que perdeu a conexão por 3 minutos, a que ficou presa na abertura do jogo e a que está numa hunt mas parou de receber o combate há 5 minutos (sessão zumbi). Não mexem na conta que entrou em outro lugar. Avisam no Windows quando a recarga não resolve.</p></div></div>
+    <div class="ferr"><div class="ico">🗳</div><div><h3>Voto do IdleHub <span class="tag p">Premium</span></h3>
+      <p>Quando o voto de uma conta libera, aparece um selo amarelo na aba dela. Clique no selo: o voto abre numa janela do app, com o login daquela conta (Google ou Discord).</p></div></div>
+    <div class="ferr"><div class="ico">🖥</div><div><h3>Bandeja e abrir com o Windows <span class="tag g">Grátis</span></h3>
+      <p>Minimizar e o X deixam o PokeMulti rodando perto do relógio, com as contas abertas. Clique no ícone para voltar. Com o botão direito no ícone: "Sair do PokeMulti", "Abrir junto com o Windows" e "Verificar atualizações".</p></div></div>
+    <div class="ferr"><div class="ico">⬆</div><div><h3>Atualizações <span class="tag g">Grátis</span></h3>
+      <p>O app confere sozinho se saiu versão nova e mostra o botão "⬆ Nova versão" na barra. Você também pode conferir na hora em "Verificar atualizações", no alto desta janela. A atualização baixa, confere a assinatura, instala e abre o app de novo, com os logins guardados.</p></div></div>
+    <div class="ferr"><div class="ico">⭐</div><div><h3>Premium <span class="tag g">Grátis</span></h3>
+      <p>Os 7 primeiros dias são de Premium grátis. Depois, o app continua grátis com o jogo nas 4 contas. Clique no botão ⭐ da barra para ver como assinar e colar a key.</p></div></div>
+  </section>
+</main>
+<script>
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  function mostrar(aba) {
+    if (!$('aba-' + aba)) aba = 'novidades';
+    for (const b of document.querySelectorAll('nav button')) b.classList.toggle('on', b.dataset.aba === aba);
+    for (const s of document.querySelectorAll('.aba')) s.classList.toggle('on', s.id === 'aba-' + aba);
+    document.querySelector('main').scrollTop = 0;
+  }
+  for (const b of document.querySelectorAll('nav button')) b.onclick = () => mostrar(b.dataset.aba);
+  api.onAjudaAba(aba => mostrar(aba));
+  mostrar(new URLSearchParams(location.search).get('aba') || 'novidades');
+
+  api.ajudaDados().then(d => {
+    $('versao').textContent = d.versao;
+    $('aba-novidades').innerHTML = d.novidades.map(v => `<div class="versao${v.versao === d.versao ? ' atual' : ''}">
+      <h2>Versão ${esc(v.versao)} <small>${esc(v.data)}</small>${v.versao === d.versao ? '<span class="selo">a sua</span>' : ''}</h2>
+      ${v.itens.map(([t, x]) => `<p class="item"><b>${esc(t)}:</b> ${esc(x)}</p>`).join('')}</div>`).join('')
+      + '<p class="dica">Quer saber como usar cada ferramenta? Veja o <a href="#" id="irTutorial" style="color:#cdb6ff">tutorial das ferramentas</a>.</p>';
+    $('irTutorial').onclick = e => { e.preventDefault(); mostrar('ferramentas'); };
+  });
+
+  $('verificar').onclick = async () => {
+    $('verificar').disabled = true;
+    $('verTxt').className = ''; $('verTxt').textContent = 'Verificando…';
+    $('atualizar').style.display = 'none';
+    const r = await api.ajudaVerificar();
+    $('verificar').disabled = false;
+    if (!r.ok) { $('verTxt').className = 'erro'; $('verTxt').textContent = `Não consegui verificar agora (${r.erro}). Tente de novo em instantes.`; return; }
+    if (r.nova) { $('verTxt').className = 'nova'; $('verTxt').textContent = `Saiu a versão ${r.nova}!`; $('atualizar').style.display = ''; }
+    else { $('verTxt').className = 'ok'; $('verTxt').textContent = '✓ Você está com a versão mais nova.'; }
+  };
+  $('atualizar').onclick = () => { $('atualizar').disabled = true; api.ajudaAtualizar(); };
+</script>
+</body>
+</html>

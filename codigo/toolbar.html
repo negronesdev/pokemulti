@@ -61,6 +61,8 @@
   <button id="pd" title="Pokédex de consulta para o Mini Games: as sombras de todas as espécies do jogo, filtradas pelas pistas que você marcar. Usa só os dados do jogo que o app já guardou; não conversa com o jogo.">🔍</button>
   <button id="rep" title="Reposição automática de bolas: compra na loja do jogo (em coins) quando o estoque de uma conta fica abaixo do número escolhido, até o total que você definir. Nas 4 contas, cada uma com a sua regra.">🛒</button>
   <button id="hu" title="Melhor hunt: as hunts que mais rendem para o pokémon em campo de cada conta (XP, ouro e risco), simulando a luta com as regras do jogo.">🗺</button>
+  <button id="tc" title="Caça do Top Catch: numa conta, vai de hunt em hunt atrás das espécies que faltam na semana, respeitando a trava do combate. Começa desligada.">🏆</button>
+  <button id="tema" title="Temas: muda as cores do jogo em cada conta (só na sua tela)">🎨</button>
   <button id="cx" title="Caixa do projeto: a carteira do jogo na rede Solana, de onde saem os saques. Lê as transações novas a cada 10 min (dados públicos) e avisa quando sai dinheiro que não é saque, quando o caixa cai rápido ou quando os saques param.">🏦</button>
   <button id="ec" title="Economia do RMT: cotação gema ⇄ coin, melhores rotas de conversão, ciclos e flips (com os dados que o app já coleta)">💰<span class="lbl"> Economia</span></button>
   <button id="pk" title="Monitor de Pokémons do RMT: vendas reais, preço por nota e pechinchas (pela Conta 1)">🐉<span class="lbl"> Pokémons</span></button>
@@ -81,6 +83,7 @@
   <button id="ultra" title="Ultra leve: o mínimo de processador e memória. Tudo da Economia extra, mais:&#10;• o 'movimento reduzido' do próprio jogo (sem chuva, brilhos e animações contínuas);&#10;• a página escondida que inchar de memória é recarregada.&#10;O vídeo das lives da Twitch e da Kick fica como está: é ele que dá os pontos.">🍃<span class="lbl opc"> Ultra leve</span></button>
   <button id="rel" title="Recarregar conta atual (F5)">⟳</button>
   <button id="relAll" title="Recarregar as 4 contas">⟳<span class="lbl"> Todas</span></button>
+  <button id="ajuda" title="Ajuda: o tutorial de todas as ferramentas, as novidades de cada versão e Verificar atualizações">❓</button>
   <button id="nova" class="lic-aviso" style="display:none">⬆ Nova versão</button>
   <button id="lic" style="display:none"></button>
 </div>
@@ -181,6 +184,8 @@
   document.getElementById('pd').onclick = () => api.pdAbrir();
   document.getElementById('rep').onclick = () => api.repAbrir();
   document.getElementById('hu').onclick = () => api.huAbrir();
+  document.getElementById('tc').onclick = () => api.tcAbrir();
+  document.getElementById('tema').onclick = () => api.temaAbrir();
   document.getElementById('cx').onclick = () => api.cxAbrir();
   document.getElementById('imp').onclick = () => api.importLogin(st.active);
   document.getElementById('grid').onclick = () => api.toggle('grid');
@@ -190,6 +195,7 @@
   document.getElementById('zVal').ondblclick = () => api.gridZoom(0);
   document.getElementById('rel').onclick = () => api.reload(st.active);
   document.getElementById('relAll').onclick = () => api.reloadAll();
+  document.getElementById('ajuda').onclick = () => api.ajudaAbrir('ferramentas');
   // O plano: dias de Premium que faltam, Premium permanente, ou o grátis (só o jogo); o clique abre a tela do Premium
   api.onLic(l => {
     const b = document.getElementById('lic');
@@ -201,7 +207,7 @@
       : (l.modo === 'teste' ? `Premium grátis até ${l.ateTxt}` : `Premium até ${l.ateTxt}`) + '. Depois, o app continua grátis só com o jogo nas 4 contas. Clique para ver como renovar e colar a key.';
     b.classList.toggle('lic-aviso', gratis || (!perm && l.dias <= 5));
     document.body.classList.toggle('gratis', gratis);
-    for (const id of ['pd', 'rep', 'hu', 'cx', 'ec', 'pk', 'pr', 'pc', 'sn', 'tw']) document.getElementById(id).classList.toggle('premium', gratis);
+    for (const id of ['pd', 'rep', 'hu', 'cx', 'ec', 'pk', 'pr', 'pc', 'sn', 'tw', 'tc', 'tema']) document.getElementById(id).classList.toggle('premium', gratis);
     const n = document.getElementById('nova');
     n.style.display = l.nova ? '' : 'none';
     if (!n.disabled) n.title = `Saiu a versão ${l.nova}. Clique para atualizar: o app baixa, confere, instala e abre de novo sozinho. Seus logins e ajustes continuam guardados.`;
