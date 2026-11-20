@@ -104,7 +104,7 @@
         const v = document.createElement('span');
         v.className = 'voto';
         v.textContent = '🗳';
-        v.title = 'Voto disponível no IdleHub — clique para votar (abre aqui no app, com o nick e o login desta conta; entre com o Discord)';
+        v.title = 'Voto disponível no IdleHub — clique para votar (abre aqui no app, com o nick e o login desta conta; entre com o Google ou o Discord, um login diferente por conta)';
         v.onclick = e => { e.stopPropagation(); api.votar(i); };
         t.querySelector('.n').after(v);
       }

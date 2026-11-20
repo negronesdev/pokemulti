@@ -46,6 +46,23 @@ function esconder() {
   }
 }
 
+// Abrir junto com o Windows (20/11/2026, pedido do dono): fica no Executar do usuário (HKCU\...\Run), ligado pelo menu
+// do ícone; desligado de fábrica. Quem vale é o próprio Windows: se o cliente desligar no Gerenciador de Tarefas, a caixa
+// aparece desmarcada. O desinstalador apaga a entrada (empacotar.js); a atualização não mexe nela.
+// O getLoginItemSettings().openAtLogin só enxerga o nome padrão; por isso a busca pelo nome nos launchItems.
+const NOME_INICIO = process.env.PKM_TESTE_INICIO || 'PokeMulti';
+// (O instalador é por usuário e sempre usa a mesma pasta, então o caminho do exe não muda entre versões.)
+function abreComWindows() {
+  try { return app.getLoginItemSettings({ path: process.execPath }).launchItems.some(x => x.name === NOME_INICIO && x.enabled); }
+  catch { return false; }
+}
+function mudarComWindows(sim) {
+  try {
+    app.setLoginItemSettings({ openAtLogin: sim, path: process.execPath, args: [], name: NOME_INICIO, enabled: sim });
+    log(`inicio: ${sim ? 'abre' : 'não abre mais'} junto com o Windows`);
+  } catch (e) { log(`inicio: não consegui mudar (${e.message})`); }
+}
+
 function sair() {
   saindo = true;
   app.quit();
@@ -58,6 +75,7 @@ function montarMenu() {
     { type: 'separator' },
     { label: 'Minimizar manda para a bandeja', type: 'checkbox', checked: o.minimizar, click: i => { o.minimizar = i.checked; salvar(); } },
     { label: 'O X manda para a bandeja (não fecha)', type: 'checkbox', checked: o.fechar, click: i => { o.fechar = i.checked; salvar(); } },
+    { label: 'Abrir junto com o Windows', type: 'checkbox', checked: abreComWindows(), click: i => mudarComWindows(i.checked) },
     { type: 'separator' },
     { label: 'Sair do PokeMulti', click: sair }
   ]));
@@ -92,4 +110,4 @@ function segurarFechar(e) {
   return true;
 }
 
-module.exports = { ligar, segurarFechar, mostrar };
+module.exports = { ligar, segurarFechar, mostrar, abreComWindows };

@@ -396,7 +396,8 @@ const WS_ESCUTA = `(() => {
         const est = d.indexOf('"t":"estado"') >= 0; // todo pedaço do estado vai para a Melhor hunt (ver HUNT_ESCUTA)
         const abate = d.indexOf('"k":"morte"') >= 0; // e cada abate, para o ritmo medido dela
         const golpe = d.indexOf('"por":"jogador"') >= 0; // e cada golpe dele (golpes por abate)
-        if (!tw && !kk && !item && !evMk && !loja && !est && !abate && !golpe) return;
+        const tcm = d.indexOf('"topCatch') >= 0 || d.indexOf('"trocaLivreEm"') >= 0; // a 🏆 Caça do Top Catch
+        if (!tw && !kk && !item && !evMk && !loja && !est && !abate && !golpe && !tcm) return;
         try {
           const m = JSON.parse(d);
           if (m.t === 'erro') window.__pkmErro = { em: Date.now(), chave: String(m.chave || ''), msg: String(m.msg || '') };
@@ -431,6 +432,15 @@ const WS_ESCUTA = `(() => {
           }
           if (item && m.t === 'market' && m.aba === 'item') window.__pkmSniper?.aoItem(m);
           if (evMk && Array.isArray(m.ev)) for (const e of m.ev) if (e.k === 'marketComprado' || e.k === 'mktSorteio') window.__pkmSniper?.aoEvento(e);
+          // 🏆 Caça do Top Catch: a lista das espécies da semana (resposta ao topcatch.pedir), cada espécie nova capturada e
+          // quando a próxima troca de hunt fica livre (o jogo manda no evento "hunt")
+          if (tcm) {
+            if (m.t === 'topCatch') window.__pkmTcDados = { s: String(m.s ?? ''), e: Array.isArray(m.e) ? m.e.map(x => String(x[0])) : [], parcial: !!m.parcial, em: Date.now() };
+            if (m.t === 'batalha' && Array.isArray(m.ev)) for (const e of m.ev) {
+              if (e?.k === 'topCatchNova' && e.chave != null) { const n = (window.__pkmTcNovas ||= []); n.push({ s: String(e.s ?? ''), chave: String(e.chave) }); if (n.length > 200) n.shift(); }
+              if (e?.trocaLivreEm) window.__pkmTrocaLivreEm = Number(e.trocaLivreEm) || 0;
+            }
+          }
           // Catálogo do RMT (vem na entrada): nomes de itens que não estão no items.json
           if (m.t === 'welcome' && Array.isArray(m.mercado?.catalogo)) {
             window.__pkmCatalogo = {};
@@ -586,6 +596,38 @@ const HUNT_ESCUTA = `(() => {
       ativo: pk && { id: pk.id, nome: pk.nome || '', speciesId: pk.speciesId, level: pk.level, shiny: !!pk.shiny, potencia: pk.potencia,
         quality: pk.quality ?? pk.qualidade, ivs: pk.ivs || null, stats: pk.stats || null, maxHp: pk.maxHp ?? null, tipos: pk.tipos || null,
         tmAoe: !!(pk.tmAoe ?? pk.tm_aoe), zmove: pk.tmElemental ? tm.golpeTmElemental(pk.tmElemental, pk.tmFisico) : null }
+    };
+  };
+  // 🏆 Caça do Top Catch: a foto da conta para o main decidir (ver tcTick). A trava do combate é a MESMA que o jogo mostra
+  // no "Ir para o Centro Pokemon" (o botão fica desligado, com a contagem); sem o botão à vista, vale o horário que o
+  // servidor manda (centroLivreEm). A chave de cada espécie é a da Pokédex do jogo (shared/pokedex.mjs), a mesma do Top Catch.
+  window.__pkmTc = async () => {
+    const eu = window.__pkmEu, base = window.__pkmHuntBase;
+    const con = window.__pkmSock?.readyState === 1;
+    if (!eu || !base?.hunts?.length) return { con, pronto: false };
+    const pdx = await import('/shared/pokedex.mjs').catch(() => null);
+    const chave = id => String(pdx?.chavePokedex ? pdx.chavePokedex(id) : id);
+    const agoraSrv = Date.now() + (window.__pkmOffset || 0);
+    const vis = s => { const e = document.querySelector(s); return !!e && !e.classList.contains('hidden'); };
+    const contaMs = s => { const n = parseFloat(String(document.querySelector(s)?.textContent || '').replace(',', '.')); return Number.isFinite(n) && n > 0 ? Math.ceil(n * 1000) : 1000; };
+    let travaMs, travaDe;
+    if (vis('#hunt-saida') && document.querySelector('#ir-centro')) { travaMs = document.querySelector('#ir-centro').disabled ? contaMs('#ir-centro-conta') : 0; travaDe = 'botão'; }
+    else if (vis('#eco-ir-centro')) { travaMs = document.querySelector('#eco-ir-centro').disabled ? contaMs('#eco-ir-centro-conta') : 0; travaDe = 'botão'; }
+    else { travaMs = eu.huntSlug && !eu.noCentro ? Math.max(0, (Number(eu.centroLivreEm) || 0) - agoraSrv) : 0; travaDe = 'servidor'; }
+    const d = window.__pkmTcDados, semana = String(eu.topCatch?.s ?? '');
+    const novas = (window.__pkmTcNovas || []).splice(0);
+    const hunts = [];
+    for (const h of base.hunts) {
+      if (!h || !Array.isArray(h.especies) || !h.especies.length || h.slug === 'centro_pokemon') continue;
+      hunts.push({ slug: h.slug, nome: h.nome || h.name || h.slug, regiao: h.regiao || '', nivel: Number(h.nivel ?? h.level) || 0,
+        especies: h.especies.map(e => ({ id: Number(e.pokeId), chave: chave(e.pokeId), pontos: Number(e.pontos) || 1 })) });
+    }
+    return {
+      con, pronto: true, nivel: Number(eu.level) || 0, huntSlug: eu.huntSlug || '', noCentro: !!eu.noCentro,
+      ocupada: eu.boss?.arena ? 'boss' : eu.mistico ? 'místico' : eu.safari?.dentro ? 'safari' : eu.casa?.dentro ? 'casa' : '',
+      travaMs, travaDe, trocaLivreMs: Math.max(0, (window.__pkmTrocaLivreEm || 0) - agoraSrv),
+      semana, dadosOk: !!d && !!semana && d.s === semana && !d.parcial, capturadas: d && d.s === semana ? d.e : [], novas,
+      erro: window.__pkmErro || null, hunts
     };
   };
 })();`;
@@ -2818,6 +2860,195 @@ function abrirHunts() {
   if (d?.v !== JOGO_VERSAO) jogoMontar(true);
 }
 
+// ---------- 🏆 Caça do Top Catch (19/11/2026, pedido do usuário; por enquanto só no app pessoal) ----------
+// Numa conta escolhida, vai de hunt em hunt atrás das espécies que ainda faltam no Top Catch da semana. A lista da
+// semana vem do próprio jogo (topcatch.pedir, a mesma da tela do Top Catch) e cada captura nova chega no evento
+// topCatchNova. A fila são as hunts liberadas para o nível da conta com espécie faltando, primeiro as que têm MAIS
+// espécies faltando (uma hunt costuma ter várias). Fica numa hunt até fechar o que falta ali ou até o tempo máximo;
+// estourou, pula para a próxima e só volta a ela quando as outras acabarem.
+// A TRAVA: depois de dano, o jogo não deixa sair da hunt por um tempo (o "Ir para o Centro Pokemon" fica desligado,
+// com a contagem), e há um tempo mínimo entre trocas de hunt. A caça só pede a troca com as duas livres, e o pedido é
+// o MESMO do botão "Caçar" do mapa (hunt.select). Se o jogo não trocar em 20 s, tenta de novo; na 3ª, pula a hunt.
+// Se a conta voltar ao Centro sozinha (o pokémon caiu), pula aquela hunt. Os Termos (seção 5) permitem automação que
+// siga as regras de quem joga na mão: é uma troca de hunt de vez em quando, respeitando as travas do próprio jogo.
+// Não captura: quem lança as bolas é o próprio jogo (o "Lançar sem parar" do VIP).
+const TC_TESTE = process.env.PKM_TC_TESTE === '1'; // o teste isolado encurta as esperas
+const TC_CADA_MS = TC_TESTE ? 300 : 5000;
+const TC_CONFIRMA_MS = TC_TESTE ? 1500 : 20000;
+const TC_LISTA_MS = TC_TESTE ? 3000 : 10 * 60000;   // pede a lista inteira de novo (as novas chegam no evento)
+const TC_LISTA_FALTA_MS = TC_TESTE ? 800 : 30000;  // sem a lista ainda: pede de novo depois disto
+const tc = { semana: '', capt: new Set(), pulos: {}, tentativas: {}, voltou: new Set(), hunt: '', huntDesde: 0, pedida: null, listaEm: 0,
+  situacao: 'desligada', fila: [], log: [], ocupado: false, minUnidade: TC_TESTE ? 1000 : 60000 };
+const tcCfg = () => (cfg.topCatch = { ligado: false, conta: 0, minutos: 20, ...(cfg.topCatch || {}) });
+const tcNomeEsp = id => jogoLer()?.especies?.[id]?.n || `#${id}`;
+let tcWin = null;
+function tcLog(msg) {
+  const linha = `${new Date().toLocaleString('pt-BR')}  ${msg}`;
+  tc.log.push(linha);
+  if (tc.log.length > 300) tc.log.shift();
+  try { fs.appendFileSync(path.join(app.getPath('userData'), 'topcatch.log'), linha + '\n'); } catch {}
+}
+function tcAvisar(corpo) {
+  if (!Notification.isSupported()) return;
+  const c = tcCfg(), n = new Notification({ title: `Top Catch: ${cfg.names[c.conta]}`, body: corpo });
+  n.on('click', () => abrirTopCatch());
+  n.show();
+}
+function tcEnviar() {
+  if (!tcWin || tcWin.isDestroyed()) return;
+  const c = tcCfg();
+  tcWin.webContents.send('tcstate', { cfg: c, nomes: cfg.names, situacao: tc.situacao, hunt: tc.hunt, semana: tc.semana, capturadas: tc.capt.size,
+    fila: tc.fila.slice(0, 30).map(h => ({ ...h, faltam: h.faltam.map(tcNomeEsp) })), pulos: tc.pulos, log: tc.log.slice(-80) });
+}
+// A fila: hunts liberadas com espécie faltando. As puladas por TEMPO voltam quando não sobra outra; as outras (não
+// entra, o pokémon caiu) ficam de fora até religar a caça.
+function tcMontarFila(r) {
+  const lista = [];
+  for (const h of r.hunts) {
+    if (h.nivel > r.nivel) continue;
+    const vistos = new Set(), faltam = [];
+    let total = 0, peso = 0;
+    for (const e of h.especies) {
+      total += e.pontos;
+      if (tc.capt.has(e.chave) || vistos.has(e.chave)) continue;
+      vistos.add(e.chave);
+      faltam.push(e.id);
+      peso += e.pontos;
+    }
+    if (faltam.length) lista.push({ slug: h.slug, nome: h.nome, nivel: h.nivel, faltam, peso: total ? peso / total : 0, pulo: tc.pulos[h.slug]?.motivo || '' });
+  }
+  return lista.sort((a, b) => b.faltam.length - a.faltam.length || b.peso - a.peso);
+}
+function tcEscolher(fila) {
+  const livres = fila.filter(h => !tc.pulos[h.slug]);
+  if (livres.length) return livres[0];
+  // Cada hunt que estourou o tempo volta UMA vez (uma espécie que nunca aparece não prende a caça para sempre)
+  const porTempo = fila.filter(h => tc.pulos[h.slug]?.tempo && !tc.voltou.has(h.slug));
+  if (!porTempo.length) return null;
+  for (const h of porTempo) { delete tc.pulos[h.slug]; tc.voltou.add(h.slug); }
+  tcLog(`as outras hunts acabaram: volto uma vez às que estouraram o tempo (${porTempo.length})`);
+  return porTempo[0];
+}
+const tcSituacao = s => { tc.situacao = s; };
+async function tcTick() {
+  return; // edição de venda: a caça do Top Catch é só do app pessoal, por enquanto
+  const c = tcCfg();
+  if (!c.ligado || tc.ocupado) return;
+  tc.ocupado = true;
+  try {
+    const i = c.conta, wc = views[i]?.webContents;
+    if (!wc || wc.isDestroyed() || wc.isLoading()) return tcSituacao('esperando a conta carregar');
+    const r = await Promise.race([wc.executeJavaScript('window.__pkmTc ? window.__pkmTc() : null'), espera(8000).then(() => null)]).catch(() => null);
+    if (!r?.pronto) return tcSituacao('esperando o jogo da conta (ela entrou no jogo?)');
+    if (!r.con) return tcSituacao('a conta está sem conexão com o jogo');
+    const agora = Date.now();
+    if (r.semana && r.semana !== tc.semana) {
+      if (tc.semana) tcLog(`virou a semana do Top Catch (${r.semana}): a lista recomeça`);
+      Object.assign(tc, { semana: r.semana, capt: new Set(), pulos: {}, tentativas: {}, voltou: new Set(), listaEm: 0 });
+    }
+    for (const k of r.capturadas) tc.capt.add(k);
+    for (const n of r.novas) {
+      if (n.s && n.s !== tc.semana) continue;
+      if (!tc.capt.has(n.chave)) {
+        tc.capt.add(n.chave);
+        const h = r.hunts.find(x => x.slug === r.huntSlug), e = h?.especies.find(x => x.chave === n.chave);
+        tcLog(`capturou ${e ? tcNomeEsp(e.id) : 'a espécie ' + n.chave}${h ? ` em ${h.nome}` : ''} (${tc.capt.size} na semana)`);
+      }
+    }
+    const enviar = obj => wc.executeJavaScript(`window.__pkmEnviar(${JSON.stringify(obj)})`).catch(() => false);
+    if (!r.dadosOk || agora - tc.listaEm > TC_LISTA_MS) {
+      if (agora - tc.listaEm > (r.dadosOk ? TC_LISTA_MS : TC_LISTA_FALTA_MS)) { tc.listaEm = agora; await enviar({ t: 'topcatch.pedir' }); }
+      if (!r.dadosOk) return tcSituacao('pedindo ao jogo a lista do Top Catch da semana');
+    }
+    tc.fila = tcMontarFila(r);
+    if (r.ocupada) return tcSituacao(`a conta está em ${r.ocupada}: espero ela sair`);
+    // A troca pedida apareceu?
+    const p = tc.pedida;
+    if (p) {
+      const nomeP = tc.fila.find(h => h.slug === p.slug)?.nome || p.slug;
+      if (r.huntSlug === p.slug && !r.noCentro) {
+        tc.pedida = null;
+        tc.hunt = p.slug;
+        tc.huntDesde = agora;
+        delete tc.tentativas[p.slug];
+      } else if (agora - p.em > TC_CONFIRMA_MS) {
+        tc.pedida = null;
+        const n = (tc.tentativas[p.slug] = (tc.tentativas[p.slug] || 0) + 1);
+        const motivo = r.erro && r.erro.em > p.em - 2000 ? (r.erro.msg || r.erro.chave) : 'o jogo não trocou';
+        tcLog(`não entrou em ${nomeP} (${motivo}); tentativa ${n}`);
+        if (n >= 3) { tc.pulos[p.slug] = { motivo: `não entra (${motivo})` }; tcLog(`pulei ${nomeP}: 3 tentativas sem entrar`); }
+        return tcSituacao(`não entrou em ${nomeP}; tento de novo`);
+      } else return tcSituacao(`indo para ${nomeP}…`);
+    }
+    // Mudou de hunt sem a caça pedir: voltou ao Centro (o pokémon caiu) ou a pessoa trocou
+    if (r.huntSlug !== tc.hunt || (r.noCentro && tc.hunt)) {
+      if (tc.hunt && r.noCentro) {
+        const nomeV = r.hunts.find(h => h.slug === tc.hunt)?.nome || tc.hunt;
+        tc.pulos[tc.hunt] = { motivo: 'o pokémon caiu ali' };
+        tcLog(`a conta voltou ao Centro em ${nomeV} (o pokémon caiu?): pulei essa hunt`);
+        tcAvisar(`A conta voltou ao Centro em ${nomeV}. Pulei essa hunt e sigo para a próxima.`);
+      }
+      tc.hunt = r.noCentro ? '' : r.huntSlug;
+      tc.huntDesde = agora;
+    }
+    const limite = Math.max(1, Number(c.minutos) || 20) * tc.minUnidade;
+    const atual = tc.fila.find(h => h.slug === tc.hunt && !tc.pulos[h.slug]);
+    if (atual && agora - tc.huntDesde < limite) {
+      const resta = Math.ceil((limite - (agora - tc.huntDesde)) / 60000);
+      return tcSituacao(`caçando em ${atual.nome}: faltam ${atual.faltam.map(tcNomeEsp).join(', ')} (até ${resta} min)`);
+    }
+    if (atual) {
+      tc.pulos[atual.slug] = { motivo: `${c.minutos} min sem fechar`, tempo: true };
+      tcLog(`${atual.nome}: ${c.minutos} min e ainda faltam ${atual.faltam.map(tcNomeEsp).join(', ')}; vou para a próxima`);
+    }
+    const prox = tcEscolher(tc.fila);
+    if (!prox) {
+      c.ligado = false;
+      saveCfg();
+      tcLog(`acabou: não sobrou hunt liberada com espécie faltando (${tc.capt.size} espécies na semana). Desliguei.`);
+      tcAvisar(`Acabou a fila: não sobrou hunt liberada com espécie faltando (${tc.capt.size} espécies na semana).`);
+      return tcSituacao('desligada: a fila acabou');
+    }
+    if (prox.slug === tc.hunt) { tc.huntDesde = agora; return tcSituacao(`caçando em ${prox.nome}`); }
+    if (r.travaMs > 0) return tcSituacao(`esperando a trava do combate (${(r.travaMs / 1000).toFixed(1)} s) para ir a ${prox.nome}`);
+    if (r.trocaLivreMs > 0) return tcSituacao(`esperando o tempo entre trocas (${Math.ceil(r.trocaLivreMs / 1000)} s) para ir a ${prox.nome}`);
+    if (!(await enviar({ t: 'hunt.select', slug: prox.slug }))) return tcSituacao('não consegui falar com o jogo; tento de novo');
+    tc.pedida = { slug: prox.slug, em: agora };
+    tcLog(`indo para ${prox.nome} (nível ${prox.nivel}): faltam ${prox.faltam.map(tcNomeEsp).join(', ')}`);
+    tcSituacao(`indo para ${prox.nome}…`);
+  } finally {
+    tc.ocupado = false;
+    tcEnviar();
+  }
+}
+function tcSalvar(novo) {
+  const c = tcCfg(), antes = c.ligado, contaAntes = c.conta;
+  if (Number.isInteger(novo?.conta) && novo.conta >= 0 && novo.conta < TOTAL) c.conta = novo.conta;
+  if (Number(novo?.minutos) >= 1) c.minutos = Math.min(240, Math.round(Number(novo.minutos)));
+  if (typeof novo?.ligado === 'boolean') c.ligado = novo.ligado;
+  if (c.ligado && (!antes || c.conta !== contaAntes)) {
+    // Ligou (ou trocou de conta): começa do zero na conta escolhida
+    Object.assign(tc, { semana: '', capt: new Set(), pulos: {}, tentativas: {}, voltou: new Set(), hunt: '', huntDesde: Date.now(), pedida: null, listaEm: 0 });
+    tcLog(`ligada na ${cfg.names[c.conta]}, ${c.minutos} min por hunt`);
+  } else if (!c.ligado && antes) { tc.pedida = null; tcLog('desligada'); tcSituacao('desligada'); }
+  saveCfg();
+  tcEnviar();
+}
+function abrirTopCatch() {
+  if (tcWin && !tcWin.isDestroyed()) { if (tcWin.isMinimized()) tcWin.restore(); return tcWin.focus(); }
+  tcWin = new BrowserWindow({
+    width: 760, height: 860, parent: win, autoHideMenuBar: true, backgroundColor: '#151515',
+    title: 'Caça do Top Catch',
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true }
+  });
+  tcWin.on('page-title-updated', e => e.preventDefault());
+  tcWin.loadFile(path.join(__dirname, 'topcatch.html'));
+  tcWin.webContents.on('did-finish-load', tcEnviar);
+  tcWin.on('closed', () => { tcWin = null; });
+}
+ipcMain.on('tc:abrir', () => abrirTopCatch());
+ipcMain.on('tc:salvar', (_e, novo) => tcSalvar(novo));
+
 // ---------- 🏦 Caixa do projeto: a carteira do jogo na rede Solana ----------
 // Pedido de 31/10/2026: "quero saber quando tiver saindo muito capital, para eu me precaver de futura liquidação ou
 // fim de projeto". O dinheiro das Gemas fica numa carteira pública da Solana, a "Carteira do projeto" do painel de
@@ -3777,9 +4008,9 @@ function avisarVoto(i) {
 }
 
 // O voto abre numa janela do app, na SESSÃO DA CONTA (18/11/2026, pedido do usuário): o IdleHub conta 1 voto a cada 24 h
-// por conta de login, então cada conta do jogo precisa do próprio login lá, e a janela guarda o de cada uma. Entre com o
-// DISCORD: o Google recusa login dentro de apps (é o mesmo bloqueio do jogo, e não contornamos). Links que não são do
-// IdleHub, do Discord ou do Google vão para o navegador.
+// por conta de login, então cada conta do jogo precisa do próprio login lá, e a janela guarda o de cada uma. Dá para
+// entrar com o Google ou com o Discord: o usuário testou os dois na janela do app em 18/11/2026 (no TopIdle, em 26/10,
+// o Google tinha recusado). Links que não são do IdleHub, do Discord ou do Google vão para o navegador.
 const isVotoHost = host => /(^|\.)idlehub\.io$/.test(host);
 const isLoginVotoHost = host => isVotoHost(host) || /(^|\.)discord\.com$|(^|\.)google\.com$/.test(host);
 const votoWins = [];
@@ -4354,6 +4585,8 @@ function createWindow() {
   setInterval(repTick, 3000);
   // 🛟 Vigia de conexão: a conta que cai é recarregada sozinha (ver vigiaTick)
   setInterval(() => vigiaTick().catch(e => appLog(`vigia: erro (${e.message})`)), VIGIA_CADA_MS);
+  // 🏆 Caça do Top Catch (só age ligada; ver tcTick)
+  setInterval(() => tcTick().catch(e => { tc.ocupado = false; tcLog(`erro: ${e.message}`); }), TC_CADA_MS);
   // 🏦 Caixa do projeto: a carteira do jogo na rede Solana a cada 10 min (a cada 2 enquanto houver fila); o painel de
   // Gemas do jogo, pela Conta 1, de hora em hora
   caixaAgendar(CAIXA_TESTE ? 3000 : 45000);
