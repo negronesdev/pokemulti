@@ -387,8 +387,12 @@ const WS_ESCUTA = `(() => {
         const tw = d.indexOf('"twitch"') >= 0, kk = d.indexOf('"kick"') >= 0;
         const item = d.indexOf('"aba":"item"') >= 0;
         // Vitrine de pokemon (anúncios de uma espécie, ou de todas): o Sniper de pokemon confere
-        if (d.indexOf('"aba":"vitrine"') >= 0 && window.__pkmSniper?.aoVitrine) {
-          try { const m = JSON.parse(d); if (m.t === 'market' && m.aba === 'vitrine') window.__pkmSniper.aoVitrine(m); } catch {}
+        // e o 📡 Radar avalia (RADAR_SCRIPT)
+        if (d.indexOf('"aba":"vitrine"') >= 0 && (window.__pkmSniper?.aoVitrine || window.__pkmRadar)) {
+          try {
+            const m = JSON.parse(d);
+            if (m.t === 'market' && m.aba === 'vitrine') { window.__pkmSniper?.aoVitrine?.(m); try { window.__pkmRadar?.vitrine(m); } catch {} }
+          } catch {}
         }
         // Resumo de todos os itens do RMT (menor preço e média de 7 dias): o Monitor de Preços guarda
         if (d.indexOf('"aba":"itens"') >= 0) {
@@ -2380,6 +2384,359 @@ function pkmSalvarOpcoes(novo) {
   saveCfg();
   pkmEnviar();
 }
+
+// ---------- 📡 Radar do Mercado: cada anúncio de pokémon avaliado pelas vendas reais (21/11/2026, pedido do dono) ----------
+// A conta (veredito, oportunidade, lucro) mora em radar.js; aqui ficam os dados e o caminho até a tela.
+// De onde vêm os anúncios: TODA vitrine de pokémon que passa pelo socket de qualquer conta (a pessoa navegando no Mercado,
+// o Sniper, o Monitor de Pokémons) cai na fila do RADAR_SCRIPT da página; ela avisa pelo console e o app vem buscar,
+// avalia e devolve as avaliações, que a página desenha como etiqueta em cada card. Para os alertas, a VARREDURA pergunta
+// pela Conta 1, a cada `varrerMin` minutos, as 2 primeiras páginas dos anúncios mais recentes (48 anúncios, 2 pedidos com
+// 1,2 s entre eles): bem menos que o Sniper. Nada vai para servidor nenhum além do próprio jogo.
+// O valor de referência: em gemas, o do 💲 Precificador (vendas parecidas pela força, com os Adicionais); sem os 6 IVs,
+// em coins ou quando o Precificador não acha nada, a mediana das vendas mais parecidas do Monitor (pkmAvaliar).
+const RD = require('./radar.js');
+const RD_MAX = 2500;                  // anúncios guardados para a janela (os vistos há mais tempo saem primeiro)
+const RD_VALIDADE = 3 * 3600e3;       // anúncio não visto há 3 h sai da lista (pode ter sido vendido)
+const RD_RETENCAO = 120e3;            // a retenção do anúncio novo: ele foi posto ~2 min antes do `compravelEm`
+let rdWin = null, rdCtxCache = null, rdUltVarredura = 0, rdVarrendo = false, rdAviso = '';
+const rdAnuncios = new Map();         // id -> { visto, a (o anúncio compacto), av (a avaliação), precoAv }
+const rdAvisados = new Map();         // id -> preço avisado (o mesmo anúncio só avisa de novo se baixar o preço)
+
+const rdOpcoes = () => {
+  cfg.radar ??= {};
+  const o = cfg.radar;
+  return Object.assign(o, {
+    etiquetas: o.etiquetas !== false,
+    alertas: o.alertas !== false,
+    alertaMin: RD.NIVEL[o.alertaMin] >= RD.NIVEL.bom ? o.alertaMin : 'otimo',
+    varrer: o.varrer !== false,
+    varrerMin: Math.min(30, Math.max(2, Number(o.varrerMin) || 3)),
+    minVendas: Math.min(20, Math.max(2, Number(o.minVendas) || 4))
+  });
+};
+
+// O contexto das vendas, refeito quando chega venda nova: por espécie, moeda e shiny, as notas vendidas (a raridade), as
+// vendas dos 7 dias (se vende rápido), as dos 30 dias (vendas parecidas e a venda recente perto do preço) e a tendência
+// (a mediana dos 3 últimos dias contra a dos 27 de antes); e a força (⚔ Nv100) de tudo o que foi vendido em gemas (a régua).
+function rdCtx() {
+  const p = pkmLer(), d = jogoLer();
+  const chave = `${p.vendas.length}|${p.vendas.at(-1)?.[0]}|${d?.em ?? 0}`;
+  if (rdCtxCache?.chave === chave && Date.now() - rdCtxCache.em < 15 * 60000) return rdCtxCache;
+  const agora = Date.now(), c30 = agora - 30 * 864e5, c7 = agora - 7 * 864e5, c3 = agora - 3 * 864e5;
+  const grupos = new Map(), notas = new Map();
+  for (const v of p.vendas) {
+    if (v[14] || v[1] < c30 || !(v[3] > 0)) continue;
+    const k = `${v[2]}|${v[4]}|${v[7] ? 1 : 0}`;
+    let g = grupos.get(k);
+    if (!g) grupos.set(k, g = { v7: 0, vendas: [], recentes: [], antes: [] });
+    if (v[1] >= c7) g.v7++;
+    g.vendas.push([v[1], v[3], v[5], v[6], v[8]]); // em, preço, nota, nível, potência
+    (v[1] >= c3 ? g.recentes : g.antes).push(v[3]);
+    if (v[5] != null) {
+      const kn = `${v[2]}|${v[7] ? 1 : 0}`;
+      if (!notas.has(kn)) notas.set(kn, []);
+      notas.get(kn).push(Number(v[5]));
+    }
+  }
+  for (const g of grupos.values()) {
+    const r = RD.mediana(g.recentes), a = RD.mediana(g.antes);
+    g.tendencia = g.recentes.length >= 5 && g.antes.length >= 5 && a > 0 ? r / a : null;
+    delete g.recentes; delete g.antes;
+  }
+  for (const l of notas.values()) l.sort((x, y) => x - y);
+  const pc = prCtx();
+  const pves = pc.erro ? [] : pc.rows.map(r => r.pve).filter(Number.isFinite).sort((x, y) => x - y);
+  rdCtxCache = { chave, em: Date.now(), grupos, notas, pves, cat: pc.erro ? null : pc.cat };
+  return rdCtxCache;
+}
+
+// As vendas PARECIDAS com o anúncio: mesma espécie, moeda e shiny, nota a até 0,6, potência igual e nível entre a metade e o dobro
+const rdParecida = (s, a) => s[2] != null && Math.abs(s[2] - a.nota) <= 0.6 && s[4] === a.potencia && s[3] >= a.nivel / 2 && s[3] <= a.nivel * 2;
+
+function rdReferencia(a, c) {
+  const moedaN = a.moeda === 'orb' ? 1 : 0;
+  const g = c.grupos.get(`${a.especie}|${moedaN}|${a.shiny ? 1 : 0}`);
+  const parecidas = g ? g.vendas.filter(s => rdParecida(s, a)).length : 0;
+  let ref = null, pve = null;
+  const ivs = Array.isArray(a.ivs) && a.ivs.length === 6 && a.ivs.every(x => x >= 1 && x <= 32) ? Object.fromEntries(PR.STATS.map((k, i) => [k, a.ivs[i]])) : null;
+  if (a.moeda === 'orb' && ivs && a.qualidade > 0 && a.potencia >= 1) {
+    const r = prPrecificar({ speciesId: a.especie, level: a.nivel, potencia: a.potencia, quality: a.qualidade, shiny: a.shiny, ivs,
+      tmElemental: a.z || null, tmAoe: a.aoe, nota: a.nota }, true);
+    if (!r.erro) pve = r.pve ?? null;
+    if (!r.erro && r.available && r.median > 0) ref = { valor: r.median, low: r.low, high: r.high, n: parecidas, conf: r.confidence?.percent ?? null };
+  }
+  if (pve == null && ivs && c.cat) { try { pve = c.cat.avaliar({ ivs, quality: a.qualidade, potencia: a.potencia, shiny: a.shiny }, a.especie)?.pve ?? null; } catch {} }
+  if (!ref && a.nota != null) {
+    const av = pkmAvaliar(pkmLer().vendas, a.especie, moedaN, { nota: a.nota, nivel: a.nivel, shiny: a.shiny, potencia: a.potencia, tm: a.tm }, 3);
+    if (av) ref = { valor: av.valor, low: null, high: null, n: Math.max(parecidas, av.n), conf: null };
+  }
+  return { ref, pve, g };
+}
+
+// Um anúncio cru da vitrine (com a ficha), no formato que o Radar guarda
+function rdCompactar(l) {
+  const f = l.ficha || {};
+  return { id: Number(l.id), preco: Number(l.preco) || 0, moeda: l.moeda === 'orb' ? 'orb' : 'gold', compravelEm: Number(l.compravelEm) || 0,
+    vendedor: String(l.vendedor ?? ''), especie: Number(f.speciesId) || 0, nome: String(f.nome || ''), nota: f.nota != null ? Number(f.nota) : null,
+    nivel: Number(f.level) || 0, shiny: !!f.shiny, potencia: Number(f.potencia) || 0, ivTotal: f.ivTotal != null ? Number(f.ivTotal) : null,
+    qualidade: Number(f.quality ?? f.qualidade) || 0, ivs: f.ivs && typeof f.ivs === 'object' ? IV_CHAVES.map(k => Number(f.ivs[k]) || 0) : null,
+    z: f.tmElemental ? String(f.tmElemental) : '', aoe: !!(f.tmAoe ?? f.tm_aoe), tm: !!(f.tmElemental || f.tmAoe || f.tm_aoe) };
+}
+
+function rdAvaliarUm(a, c, outros) {
+  const { ref, pve, g } = rdReferencia(a, c);
+  const agora = Date.now(), o = rdOpcoes();
+  const motivos = {};
+  // Outro anúncio igual (espécie, moeda, shiny, potência, nota a até 0,2) por até 10% a mais: a pechincha não é única
+  motivos.duplicado = outros.some(b => b.id !== a.id && b.especie === a.especie && b.moeda === a.moeda && b.shiny === a.shiny && b.potencia === a.potencia
+    && b.nota != null && a.nota != null && Math.abs(b.nota - a.nota) <= 0.2 && b.preco <= a.preco * 1.1);
+  motivos.queda = g?.tendencia != null && g.tendencia < 0.8;
+  motivos.parado = a.compravelEm > 0 && agora - (a.compravelEm - RD_RETENCAO) > 2 * 864e5;
+  // Um parecido vendido nas últimas 24 h por até 15% acima deste preço: o mercado paga mesmo por volta disto
+  motivos.vendaPerto = !!g && g.vendas.some(s => s[0] >= agora - 864e5 && rdParecida(s, a) && s[1] <= a.preco * 1.15);
+  const regua = pve != null && c.pves.length >= 30 ? Math.round(RD.fracaoAbaixo(c.pves, pve) * 100) : null;
+  const av = RD.avaliar(a, ref, { minVendas: o.minVendas, vendas7d: g?.v7 ?? 0, regua, motivos });
+  const ln = c.notas.get(`${a.especie}|${a.shiny ? 1 : 0}`);
+  const rar = a.nota != null && ln?.length >= 10 ? Math.max(1, Math.round((1 - RD.fracaoAbaixo(ln, a.nota + 1e-9)) * 100)) : null;
+  return { ...av, rar, reg: regua, f: pve != null ? Math.round(pve) : null, ppf: pve > 0 ? Math.round(a.preco / pve * 100) / 100 : null,
+    iu: RD.ivUtil(jogoLer()?.especies?.[a.especie], a.ivs), v7: g?.v7 ?? 0 };
+}
+
+// A chave com que a página acha o card do anúncio: o que o card mostra (nível, IV total e nota com 2 casas)
+const rdChaveCard = a => `${a.nivel}|${a.ivTotal}|${Math.round((a.nota ?? 0) * 100)}`;
+
+// Os anúncios que uma conta mandou: avalia (cada um uma vez por preço, refeito a cada 10 min), guarda para a janela,
+// avisa as pechinchas e devolve as etiquetas para a página daquela conta
+const rdColhendo = new Set();
+async function rdColher(i) {
+  if (rdColhendo.has(i)) return;
+  rdColhendo.add(i);
+  try {
+    await espera(250); // junta as vitrines que chegam em sequência
+    const wc = views[i]?.webContents;
+    if (!wc || wc.isDestroyed()) return;
+    const lista = await wc.executeJavaScript('window.__pkmRadar ? window.__pkmRadar.tirar() : []').catch(() => []);
+    if (!Array.isArray(lista) || !lista.length) return;
+    if (!jogoLer()) { if (!jogoMontando) jogoMontar(); }
+    const c = rdCtx(), agora = Date.now(), novos = [], marcas = [];
+    const chegaram = lista.map(rdCompactar).filter(a => a.id > 0 && a.especie > 0 && a.preco > 0);
+    const outros = [...chegaram, ...[...rdAnuncios.values()].map(x => x.a)];
+    let feitos = 0;
+    for (const a of chegaram) {
+      const ja = rdAnuncios.get(a.id);
+      let av = ja?.av;
+      if (!ja || ja.precoAv !== a.preco || agora - ja.avEm > 10 * 60000 || ja.ctx !== c.chave) {
+        av = rdAvaliarUm(a, c, outros);
+        if (++feitos % 8 === 0) await new Promise(r => setImmediate(r)); // cede a vez ao resto do app
+      }
+      rdAnuncios.set(a.id, { visto: agora, a, av, precoAv: a.preco, avEm: ja && av === ja.av ? ja.avEm : agora, ctx: c.chave, desde: ja?.desde ?? agora });
+      marcas.push({ k: rdChaveCard(a), p: a.preco, av: { v: av.v, vs: av.vs, med: av.med, n: av.n, rar: av.rar, iu: av.iu, f: av.f, op: av.op, lucro: av.lucro, aprox: av.aprox, motivos: av.motivos } });
+      if (RD.atende(av.v, rdOpcoes().alertaMin) && !(rdAvisados.get(a.id) <= a.preco)) { rdAvisados.set(a.id, a.preco); novos.push({ a, av }); }
+    }
+    // Lista e avisos que já não servem: o que não é visto há 3 h, e o que passou do limite
+    for (const [id, x] of rdAnuncios) if (agora - x.visto > RD_VALIDADE) { rdAnuncios.delete(id); rdAvisados.delete(id); }
+    if (rdAnuncios.size > RD_MAX) for (const [id] of [...rdAnuncios].sort((x, y) => x[1].visto - y[1].visto).slice(0, rdAnuncios.size - RD_MAX)) rdAnuncios.delete(id);
+    if (rdOpcoes().etiquetas) wc.executeJavaScript(`window.__pkmRadar && window.__pkmRadar.marcas(${JSON.stringify(marcas)})`).catch(() => {});
+    if (novos.length) rdAvisar(novos);
+    rdEnviarLogo();
+  } catch (e) {
+    appLog(`radar: erro (${e.message})`);
+  } finally {
+    rdColhendo.delete(i);
+  }
+}
+
+const rdFmt = v => Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+function rdAvisar(novos) {
+  for (const { a, av } of novos) appLog(`radar: ${RD.ROTULO[av.v]} ${a.shiny ? 'shiny ' : ''}${a.nome} Nv ${a.nivel} N${a.nota} a ${a.preco} ${a.moeda === 'orb' ? 'gemas' : 'coins'} (mercado ${av.med}, ${av.vs}%)`);
+  const o = rdOpcoes();
+  if (!o.alertas || !Notification.isSupported()) return;
+  novos.sort((x, y) => RD.NIVEL[y.av.v] - RD.NIVEL[x.av.v] || y.av.op - x.av.op);
+  const n = new Notification({
+    title: novos.length === 1 ? `📡 ${RD.ROTULO[novos[0].av.v]} no Mercado` : `📡 ${novos.length} oportunidades no Mercado`,
+    body: novos.slice(0, 4).map(({ a, av }) => `${RD.ROTULO[av.v]} · ${a.shiny ? '✨ ' : ''}${a.nome} Nv ${rdFmt(a.nivel)}: ${rdFmt(a.preco)} ${a.moeda === 'orb' ? 'gemas' : 'coins'} (mercado ~${rdFmt(av.med)}, ${av.vs}%)`).join('\n')
+  });
+  n.on('click', () => abrirRadar());
+  n.show();
+}
+
+// A VARREDURA dos anúncios novos (pela Conta 1). As respostas passam pela página dela e voltam pela fila, como as outras.
+// Espera o Monitor de Pokémons (usa o mesmo canal de pedido e resposta) e o Mercado aberto na tela da Conta 1.
+async function rdVarrer(forcar = false) {
+  const o = rdOpcoes();
+  if (rdVarrendo || !licenca.premium() || !cfg.radarUsado) return;
+  if (!forcar && (!o.varrer || Date.now() - rdUltVarredura < o.varrerMin * 60000 - 5000)) return;
+  if (pkmOcupado) return;
+  if (await pkmMercadoAberto()) { rdAviso = 'Varredura esperando: o Mercado está aberto na Conta 1 (os anúncios que você vê lá já são avaliados).'; return rdEnviarLogo(); }
+  rdVarrendo = pkmOcupado = true;
+  rdUltVarredura = Date.now();
+  rdAviso = '';
+  try {
+    for (let pg = 0; pg < 2; pg++) {
+      const r = await pkmPedir({ t: 'market.listar', tipo: 'pokemon', moeda: '', busca: '', ordem: 'recentes', criterios: [], elementos: [], pagina: pg, especieId: 0 }, 'vitrine');
+      if (r?.erro) { rdAviso = `Varredura: ${pkmErroDaConta(r.erro)}`; break; }
+      if ((pg + 1) * 24 >= (Number(r.total) || 0)) break;
+      await espera(1200);
+    }
+  } finally {
+    rdVarrendo = pkmOcupado = false;
+    rdEnviarLogo();
+  }
+}
+
+// A janela recebe tudo de uma vez, no máximo 1 vez por segundo
+let rdEnvioRelogio = null;
+function rdEnviarLogo() {
+  if (!rdWin || rdWin.isDestroyed() || rdEnvioRelogio) return;
+  rdEnvioRelogio = setTimeout(() => { rdEnvioRelogio = null; rdEnviar(); }, 1000);
+}
+function rdEnviar() {
+  if (!rdWin || rdWin.isDestroyed()) return;
+  const o = rdOpcoes();
+  rdWin.webContents.send('rdstate', {
+    anuncios: [...rdAnuncios.values()].map(x => ({ ...x.a, ...x.av, visto: x.visto, desde: x.desde })),
+    opcoes: o, rotulos: RD.ROTULO, motivos: RD.MOTIVOS, ultVarredura: rdUltVarredura, varrendo: rdVarrendo, aviso: rdAviso,
+    vendas: pkmLer().vendas.length, agora: Date.now()
+  });
+}
+
+function abrirRadar() {
+  if (!licenca.premium()) return licenca.pedirPremium('O 📡 Radar do Mercado');
+  // O Radar precisa das vendas do Monitor de Pokémons: abrir um liga a coleta das vendas (pela Conta 1)
+  let mudou = false;
+  if (!cfg.radarUsado) { cfg.radarUsado = true; mudou = true; }
+  if (!cfg.pokemonsUsado) { cfg.pokemonsUsado = true; mudou = true; }
+  if (mudou) saveCfg();
+  if (rdWin && !rdWin.isDestroyed()) { if (rdWin.isMinimized()) rdWin.restore(); return rdWin.focus(); }
+  rdWin = new BrowserWindow({
+    width: 1280, height: 840, parent: win, autoHideMenuBar: true, backgroundColor: '#151515',
+    title: 'Radar do Mercado',
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true }
+  });
+  rdWin.on('page-title-updated', e => e.preventDefault());
+  rdWin.loadFile(path.join(__dirname, 'radar.html'));
+  rdWin.webContents.on('did-finish-load', rdEnviar);
+  rdWin.on('closed', () => { rdWin = null; });
+  if (!jogoLer()) jogoMontar();
+  setTimeout(() => rdVarrer(true), 2000);
+}
+
+function rdSalvarOpcoes(novo) {
+  const o = rdOpcoes();
+  for (const k of ['etiquetas', 'alertas', 'varrer']) if (k in (novo ?? {})) o[k] = !!novo[k];
+  for (const k of ['varrerMin', 'minVendas']) if (k in (novo ?? {})) o[k] = Number(novo[k]);
+  if (typeof novo?.alertaMin === 'string') o.alertaMin = novo.alertaMin;
+  rdOpcoes();
+  saveCfg();
+  // Etiquetas desligadas: tira as que estão nos cards das 4 contas
+  if ('etiquetas' in (novo ?? {})) for (const v of views) v?.webContents && !v.webContents.isDestroyed() && v.webContents.executeJavaScript(`window.__pkmRadar && window.__pkmRadar.ligar(${o.etiquetas})`).catch(() => {});
+  if ('minVendas' in (novo ?? {})) for (const x of rdAnuncios.values()) x.ctx = ''; // reavalia na próxima vitrine
+  rdEnviar();
+}
+ipcMain.on('rd:abrir', () => abrirRadar());
+ipcMain.on('rd:opcoes', (_e, novo) => rdSalvarOpcoes(novo));
+ipcMain.on('rd:agora', () => rdVarrer(true));
+ipcMain.on('rd:limpar', () => { rdAnuncios.clear(); rdAvisados.clear(); rdEnviar(); });
+
+// Na página de cada conta: a fila das vitrines (a escuta WS_ESCUTA chama `vitrine`) e as etiquetas nos cards do Mercado.
+// O card é achado pelo que ele mostra: o botão "Ver ficha" (sobe do botão até o maior bloco que tem só ele), e no texto
+// o nível, o IV total, a nota e o preço. Dois anúncios com o mesmo nível, IV e nota: vale o de preço mais perto.
+const RADAR_SCRIPT = `(() => {
+  if (window.__pkmRadar) return;
+  const R = window.__pkmRadar = { fila: [], porChave: new Map(), ligado: true };
+  const CAMPOS = ['speciesId', 'nome', 'nota', 'level', 'shiny', 'potencia', 'ivTotal', 'quality', 'qualidade', 'ivs', 'tmElemental', 'tmAoe', 'tm_aoe', 'tmFisico'];
+  R.vitrine = m => {
+    const ls = (Array.isArray(m.linhas) ? m.linhas : []).filter(l => l && l.tipo === 'pokemon' && l.ficha);
+    if (!ls.length) return;
+    for (const l of ls) {
+      const f = {};
+      for (const k of CAMPOS) if (l.ficha[k] !== undefined) f[k] = l.ficha[k];
+      R.fila.push({ id: l.id, preco: l.preco, moeda: l.moeda, compravelEm: l.compravelEm, vendedor: l.vendedor, ficha: f });
+    }
+    if (R.fila.length > 400) R.fila.splice(0, R.fila.length - 400);
+    console.debug('__pkmRadarFila');
+  };
+  R.tirar = () => R.fila.splice(0);
+  R.marcas = lista => {
+    for (const x of lista || []) {
+      const l = R.porChave.get(x.k) || [];
+      const i = l.findIndex(y => y.p === x.p);
+      if (i >= 0) l[i] = x; else l.push(x);
+      if (l.length > 6) l.shift();
+      R.porChave.set(x.k, l);
+    }
+    if (R.porChave.size > 3000) for (const k of [...R.porChave.keys()].slice(0, R.porChave.size - 3000)) R.porChave.delete(k);
+    passar();
+  };
+  R.ligar = sim => { R.ligado = !!sim; passar(); };
+
+  const COR = { excepcional: '#b8860b', otimo: '#1d8a45', bom: '#2f7d55', justo: '#55505e', caro: '#9c2f3a', poucas: '#3d3848' };
+  const ROT = { excepcional: '★ EXCEPCIONAL', otimo: 'ÓTIMO', bom: 'BOM', justo: 'JUSTO', caro: 'CARO', poucas: 'POUCAS REFERÊNCIAS' };
+  const fmt = n => Math.round(n).toLocaleString('pt-BR');
+  const numero = t => {
+    const m = /^(\\d+(?:[.,]\\d+)*)\\s*([KkMmBb])?$/.exec(String(t).trim());
+    if (!m) return null;
+    if (m[2]) return Number(m[1].replace(/\\./g, '').replace(',', '.')) * ({ k: 1e3, m: 1e6, b: 1e9 })[m[2].toLowerCase()];
+    return Number(m[1].replace(/[.,]/g, ''));
+  };
+  const ler = card => {
+    const t = card.innerText || '';
+    const nv = /Nv\\s*([\\d.]+)/.exec(t), iv = /(?:^|[^A-Za-z])IV\\s*(\\d+)/m.exec(t), n = /(?:^|[^A-Za-z])N\\s*(\\d+[.,]\\d+)/m.exec(t);
+    const linhas = t.split('\\n').map(x => x.trim()).filter(Boolean), iVer = linhas.indexOf('Ver ficha');
+    let preco = null;
+    for (const x of iVer >= 0 ? linhas.slice(iVer + 1) : []) { const v = numero(x); if (v != null) { preco = v; break; } }
+    if (!nv || !iv || !n) return null;
+    return { k: Number(nv[1].replace(/\\./g, '')) + '|' + Number(iv[1]) + '|' + Math.round(Number(n[1].replace(',', '.')) * 100), preco };
+  };
+  const cards = lista => {
+    const out = [], it = document.evaluate(".//*[normalize-space(text())='Ver ficha']", lista, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+    const botoes = [];
+    for (let i = 0; i < it.snapshotLength; i++) { const b = it.snapshotItem(i); b.setAttribute('data-pkm-ver', '1'); botoes.push(b); }
+    for (const b of botoes) {
+      let el = b;
+      while (el.parentElement && el.parentElement !== lista && el.parentElement.querySelectorAll('[data-pkm-ver]').length === 1) el = el.parentElement;
+      out.push(el);
+    }
+    return out;
+  };
+  const etiqueta = (card, x) => {
+    let s = card.querySelector(':scope > .pkm-radar');
+    if (!s) {
+      if (getComputedStyle(card).position === 'static') card.style.position = 'relative';
+      s = document.createElement('div');
+      s.className = 'pkm-radar';
+      s.style.cssText = 'position:absolute;left:5px;right:5px;top:26px;z-index:6;border-radius:6px;padding:2px 6px;font:600 10px/1.3 system-ui,sans-serif;color:#fff;box-shadow:0 2px 6px #0009;text-align:left;cursor:help;pointer-events:auto';
+      card.appendChild(s);
+    }
+    const a = x && x.av;
+    if (!a) { s.style.background = '#3d3848dd'; s.textContent = '📡 avaliando…'; s.title = 'O app ainda não avaliou este anúncio.'; return; }
+    s.style.background = (COR[a.v] || '#3d3848') + 'ee';
+    const l1 = (ROT[a.v] || '?') + (a.vs != null ? ' ' + (a.vs > 0 ? '+' : '') + a.vs + '%' : '') + (a.rar != null ? ' · top ' + a.rar + '%' : '');
+    const l2 = a.med ? 'mercado ' + fmt(a.med) + (a.n ? ' (' + a.n + ' vendas' + (a.aprox ? ', aprox.' : '') + ')' : '') : 'sem vendas parecidas';
+    s.innerHTML = '';
+    for (const [t, w] of [[l1, 800], [l2, 500]]) { const d = document.createElement('div'); d.textContent = t; d.style.fontWeight = w; s.appendChild(d); }
+    s.title = [a.op ? 'Oportunidade: ' + a.op + '/100' : '', a.lucro != null ? 'Lucro revendendo pelo mercado, já sem a taxa: ' + fmt(a.lucro) : '',
+      a.f != null ? '⚔ Nv100: ' + fmt(a.f) : '', a.iu != null ? 'IV útil: ' + a.iu + '%' : '',
+      (a.motivos || []).length ? 'Rebaixado por cautela: ' + a.motivos.length + ' motivo(s) (veja no 📡 Radar)' : '',
+      '📡 Radar do PokeMulti: estimativa pelas vendas reais guardadas no seu PC, não garantia de lucro.'].filter(Boolean).join('\\n');
+  };
+  function passar() {
+    const lista = document.querySelector('#cm-lista');
+    const vivos = new Set();
+    if (R.ligado && lista && lista.offsetParent && !document.hidden) {
+      for (const card of cards(lista)) {
+        const c = ler(card);
+        if (!c) continue;
+        const l = R.porChave.get(c.k);
+        const x = !l ? null : l.length === 1 || c.preco == null ? l[0] : [...l].sort((a, b) => Math.abs(a.p - c.preco) - Math.abs(b.p - c.preco))[0];
+        etiqueta(card, x);
+        vivos.add(card);
+      }
+    }
+    for (const s of document.querySelectorAll('.pkm-radar')) if (!vivos.has(s.parentElement)) s.remove();
+  }
+  setInterval(passar, 1500);
+})();`;
 
 // 💲 NA FICHA DO JOGO (07/11/2026, pedido do usuário): ao lado do "Copiar p/ ChatGPT" de qualquer ficha (a sua, a de um
 // anúncio, a do ranking), um "💲 Precificar". Ele aperta o botão do próprio jogo, que copia a ficha em texto, e avisa o
@@ -4600,7 +4957,7 @@ function createGameView(i) {
     // A escuta vai nas 4 contas (a Reposição e a Melhor hunt usam em todas); o Sniper também (cada conta compra a
     // lista dela); o pedido-e-resposta dos monitores, só na Conta 1
     if (!licenca.premium()) return; // plano grátis: só o jogo, sem nenhum script nosso
-    wc.executeJavaScript(WS_ESCUTA + HUNT_ESCUTA + FICHA_PRECO_SCRIPT).catch(() => {});
+    wc.executeJavaScript(WS_ESCUTA + HUNT_ESCUTA + FICHA_PRECO_SCRIPT + RADAR_SCRIPT + `;window.__pkmRadar.ligar(${rdOpcoes().etiquetas})`).catch(() => {});
     wc.executeJavaScript((i === PRECO_CONTA ? PEDIR_SCRIPT : '') + SNIPER_SCRIPT).then(() => sniperEnviarConfig(i)).catch(() => {});
     if (i === TW_AUTO_CONTA) wc.executeJavaScript(TELA_PONTOS_SCRIPT).then(twTelaEnviar).catch(() => {});
     temaAplicar(i); // 🎨 o tema da conta (a página espera o estilo do jogo carregar)
@@ -4612,6 +4969,7 @@ function createGameView(i) {
     else if (i === TW_AUTO_CONTA && e.message.startsWith('__pkmTelaPontos:')) twTelaAberta(e.message.slice(16)).catch(() => {});
     else if (e.message.startsWith('__pkmPrecoFicha:')) prFichaDoJogo(i, e.message.slice(16));
     else if (e.message.startsWith('__pkmPrecoDetalhe:')) prFichaDetalhe(i);
+    else if (e.message === '__pkmRadarFila') rdColher(i);
   });
 
   // No modo grade, clicar dentro de um quadro torna aquela conta a selecionada
@@ -4775,6 +5133,8 @@ function createWindow() {
   setInterval(precoTalvezColetar, 60000);
   // Monitor de Pokémons: começa 3,5 min depois de abrir (depois do de itens), e confere a cada minuto
   setTimeout(() => { pkmTalvezColetar(); setInterval(pkmTalvezColetar, 60000); }, 210000);
+  // 📡 A varredura do Radar confere a cada 30 s se já passou o intervalo dela (e espera o Monitor de Pokémons)
+  setTimeout(() => setInterval(() => rdVarrer().catch(e => appLog(`radar: varredura (${e.message})`)), 30000), 240000);
   // As fichas das vendas de antes do 💲 Precificador (uma vez só; ver pkmCompletarFichas)
   setTimeout(() => {
     const ir = () => pkmCompletarFichas().catch(e => appLog(`pokémons: completar fichas: erro (${e.message})`));

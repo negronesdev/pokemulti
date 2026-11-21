@@ -1,6 +1,6 @@
 # PokeMulti
 
-Programa para Windows que abre até 4 contas do pokeidle.io em uma janela, com Sniper do Mercado, histórico de preços, Precificador de pokémon e a hunt que mais rende para o seu pokémon.
+Programa para Windows que abre até 4 contas do pokeidle.io em uma janela, com Sniper do Mercado, histórico de preços, Radar do Mercado (cada anúncio de pokémon avaliado pelas vendas reais), Precificador de pokémon e a hunt que mais rende para o seu pokémon.
 
 **[Baixar a última versão](https://github.com/negronesdev/pokemulti/releases/latest/download/PokeMulti-Setup.exe)** · [Site](https://pokemulti.app) · [Código do programa](codigo) · [Todas as versões](https://github.com/negronesdev/pokemulti/releases) · [Termos de uso](https://pokemulti.app/termos.html)
 
@@ -8,7 +8,7 @@ Programa para Windows que abre até 4 contas do pokeidle.io em uma janela, com S
 
 1. Baixe e instale. É grátis, sem cadastro, e os primeiros 7 dias são de Premium, com todos os recursos.
 2. Entre nas suas contas, na própria página do jogo, dentro do programa. Os logins ficam só no seu PC.
-3. Depois dos 7 dias, o programa continua grátis, só com o jogo nas 4 contas. Para manter as ferramentas (Sniper, monitores do Mercado, Precificador, lives e as outras), ele mostra o valor da mensalidade e o QR do Pix. Envie o comprovante pelo WhatsApp ou pelo Instagram, e você recebe uma key que libera o Premium por 30 dias.
+3. Depois dos 7 dias, o programa continua grátis, só com o jogo nas 4 contas. Para manter as ferramentas (Sniper, monitores do Mercado, Radar, Precificador, lives e as outras), ele mostra o valor da mensalidade e o QR do Pix. Envie o comprovante pelo WhatsApp ou pelo Instagram, e você recebe uma key que libera o Premium por 30 dias.
 
 ## O código está aberto para você conferir
 
