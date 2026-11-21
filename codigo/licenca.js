@@ -22,6 +22,7 @@ const REG_CHAVE = 'HKCU\\Software\\PokeMulti';
 const SITES_HORA = ['https://pokeidle.io/robots.txt', 'https://www.cloudflare.com/robots.txt'];
 const REPO_PUBLICO = 'negronesdev/pokemulti'; // onde saem as versões novas
 const VERSAO_ESPERA_MS = 30000, VERSAO_DE_NOVO_MS = 6 * 3600e3;
+const CRIPTO_ESPERA_MS = 20000; // ao abrir, confere o pedido em cripto guardado
 const SEGREDO_ESTADO = 'pm-estado-v1'; // não é segredo de verdade: só impede de editar a data à mão, sem programar
 
 const espera = ms => new Promise(r => setTimeout(r, ms));
@@ -62,7 +63,7 @@ async function lerRegistro() {
 }
 // A key que serve: assinada, deste PC. O vencimento é conferido à parte.
 function keyDestePc(k) {
-  const l = k ? F.lerKey(k) : null;
+  const l = k ? F.lerKeyAceita(k) : null;
   return l?.ok && l.codigo === F.normalizarCodigo(codigo) ? l : null;
 }
 async function carregar() {
@@ -71,7 +72,7 @@ async function carregar() {
   const abertos = brutos.map(abrirSelo).filter(Boolean);
   if (!abertos.length) {
     // Nada guardado é a primeira vez. Guardado e ilegível é arquivo mexido ou trazido de outro PC: sem novo teste.
-    st = { inicio: brutos.length ? 0 : null, visto: 0, key: '', oferta: 0 };
+    st = { inicio: brutos.length ? 0 : null, visto: 0, key: '', oferta: 0, pedido: '' };
     if (brutos.length) appLog('licença: estado ilegível (mexido ou de outro PC); sem novo teste');
     return;
   }
@@ -80,7 +81,8 @@ async function carregar() {
     inicio: Math.min(...abertos.map(o => o.inicio ?? 0)),
     visto: Math.max(...abertos.map(o => o.visto ?? 0)),
     key: keys[0]?.key ?? '',
-    oferta: Math.max(...abertos.map(o => o.oferta ?? 0)) // o dia em que a tela do Premium abriu sozinha pela última vez
+    oferta: Math.max(...abertos.map(o => o.oferta ?? 0)), // o dia em que a tela do Premium abriu sozinha pela última vez
+    pedido: abertos.find(o => o.pedido)?.pedido ?? '' // os pedidos em cripto ainda abertos (ids separados por vírgula)
   };
 }
 function salvar() {
@@ -204,7 +206,7 @@ function reabrir() {
   setTimeout(() => app.exit(0), 5000);
 }
 async function aplicar(txt) {
-  const k = F.lerKey(txt);
+  const k = F.lerKeyAceita(txt);
   if (!k.ok) return { ok: false, erro: k.erro === 'incompleta' ? 'A key está incompleta. Copie a mensagem inteira e cole de novo.' : 'Esta key não é válida. Confira se copiou certo.' };
   if (k.codigo !== F.normalizarCodigo(codigo)) return { ok: false, erro: 'Esta key é de outro PC. Envie o código deste PC para receber a certa.' };
   await Promise.race([acertarHora(), espera(3000)]);
@@ -220,10 +222,67 @@ async function aplicar(txt) {
   if (reabrindo) setTimeout(reabrir, 1500);
   return { ok: true, ateTxt: F.dataDoDia(k.ateDia), reabrindo };
 }
+// ---- Pagar com cripto (20/11/2026): USDT na Solana, conferido pelo Worker (cripto-worker/), que devolve a key sozinho.
+// Daqui só saem o código do PC e a key atual (para renovar somando os dias). O pedido aberto fica guardado: quem pagou e
+// fechou o app recebe a key na próxima abertura.
+const WORKER = String(CFG.cripto?.worker ?? '').replace(/\/+$/, '');
+async function chamarWorker(metodo, rota, corpo) {
+  const r = await net.fetch(WORKER + rota, { method: metodo, cache: 'no-store', headers: { 'content-type': 'application/json' }, body: corpo ? JSON.stringify(corpo) : undefined });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.erro || `o serviço respondeu ${r.status}`);
+  return j;
+}
+// Dois planos (20/11/2026, pedido do dono): mensal e permanente. Cada plano tem o seu pedido; os dois ficam guardados,
+// porque a pessoa pode ter pago um e trocado de plano na tela antes de confirmar.
+let pedidoCripto = null;
+const pedidosGuardados = () => String(st.pedido || '').split(',').filter(Boolean);
+function guardarPedidos(ids) { const t = [...new Set(ids)].slice(-4).join(','); if (t !== st.pedido) { st.pedido = t; salvar(); } }
+async function criptoPedido(plano) {
+  if (!WORKER) return { ok: false, erro: 'O pagamento em cripto não está disponível nesta versão.' };
+  try {
+    pedidoCripto = await chamarWorker('POST', '/pedido', { codigo, plano: plano === 'perm' ? 'perm' : 'mensal', key: keyDestePc(st.key)?.key || '' });
+    guardarPedidos([...pedidosGuardados(), pedidoCripto.id]);
+    appLog(`licença: pedido em cripto ${pedidoCripto.id} (${pedidoCripto.plano}, ${pedidoCripto.valorUi} USDT, ${pedidoCripto.rede})`);
+    return { ok: true, ...pedidoCripto };
+  } catch (e) {
+    appLog(`licença: pedido em cripto falhou: ${e?.message}`);
+    return { ok: false, erro: /permanente/.test(e?.message) ? 'Este PC já tem o Premium permanente.' : 'Não consegui falar com o serviço de pagamento. Confira a internet e tente de novo.' };
+  }
+}
+// Confere todos os pedidos guardados; o que pagou aplica a key e sai da lista, o vencido também sai
+async function criptoConferir() {
+  const ids = pedidosGuardados();
+  if (!WORKER || !ids.length) return { pago: false };
+  let expirado = false;
+  for (const id of ids) {
+    try {
+      const r = await chamarWorker('GET', '/pedido/' + id);
+      if (!r.pago) {
+        if (r.expirado) { guardarPedidos(pedidosGuardados().filter(x => x !== id)); if (id === pedidoCripto?.id) expirado = true; }
+        continue;
+      }
+      appLog(`licença: pagamento em cripto confirmado (${r.assinatura})`);
+      const a = await aplicar(r.key);
+      if (a.ok) guardarPedidos(pedidosGuardados().filter(x => x !== id));
+      else appLog(`licença: a key do pagamento em cripto não aplicou: ${a.erro}`);
+      return { pago: true, assinatura: r.assinatura, key: r.key, perm: r.ateDia >= 65535, ...a };
+    } catch {}
+  }
+  return { pago: false, expirado };
+}
 function registrarIpc() {
+  ipcMain.handle('lic:cripto:pedido', (_e, plano) => criptoPedido(plano));
+  ipcMain.handle('lic:cripto:conferir', () => criptoConferir());
+  ipcMain.on('lic:cripto:copiar', (_e, qual) => {
+    const t = { carteira: pedidoCripto?.carteira, valor: pedidoCripto?.valorUi, link: pedidoCripto?.link }[qual];
+    if (t) clipboard.writeText(t);
+  });
+  ipcMain.on('lic:cripto:transacao', (_e, sig) => {
+    if (/^[1-9A-HJ-NP-Za-km-z]{60,100}$/.test(String(sig))) shell.openExternal(`https://solscan.io/tx/${sig}${pedidoCripto?.rede === 'devnet' ? '?cluster=devnet' : ''}`);
+  });
   ipcMain.handle('lic:dados', () => ({
     ...estado(), gratis: !premiumAoAbrir, recurso: recursoPedido, testeDias: TESTE_DIAS, codigo, preco: preco(), periodo: CFG.periodo ?? 'por mês',
-    pix: pixCopiaCola(), whatsapp: !!CFG.whatsapp, instagram: CFG.instagram ?? ''
+    pix: pixCopiaCola(), whatsapp: !!CFG.whatsapp, instagram: CFG.instagram ?? '', cripto: !!WORKER
   }));
   ipcMain.handle('lic:aplicar', (_e, txt) => aplicar(txt));
   ipcMain.on('lic:copiar', (_e, qual) => {
@@ -306,6 +365,11 @@ async function iniciar({ log }) {
     }
   }
   setTimeout(() => { conferirVersao(); setInterval(conferirVersao, VERSAO_DE_NOVO_MS); }, VERSAO_ESPERA_MS);
+  // Pagou em cripto e fechou o app antes de liberar: confere o pedido guardado ao abrir
+  if (st.pedido && WORKER) setTimeout(async () => {
+    const r = await criptoConferir();
+    if (r.pago && r.ok && Notification.isSupported()) new Notification({ title: 'PokeMulti', body: `Pagamento em cripto confirmado. ${r.perm ? 'Premium permanente' : `Premium até ${r.ateTxt}`}.${r.reabrindo ? ' O app vai reabrir com as ferramentas ligadas.' : ''}` }).show();
+  }, CRIPTO_ESPERA_MS);
   return true;
 }
 // Os recursos ficam ligados só se o app abriu com o Premium (o grátis tem só o jogo nas 4 contas)
