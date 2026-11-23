@@ -46,6 +46,15 @@
   .risco-ok { color:var(--mut); } .risco-alto { color:var(--alerta); } .risco-mata { color:var(--ruim); font-weight:700; }
   .coin { color:var(--coin); }
   #mais { margin-top:8px; }
+  button.ir { height:22px; padding:0 9px; font-size:12px; }
+  button.ir.confirma { background:var(--alerta); border-color:var(--alerta); color:#111; font-weight:700; }
+  .cards .card button.ir { float:right; margin-top:-2px; }
+  #ir { border-radius:8px; padding:8px 12px; margin-bottom:10px; line-height:1.5; display:flex; gap:10px; align-items:center; }
+  #ir.indo { background:#1d2a36; border:1px solid #2f5577; color:#9ccfff; }
+  #ir.ok { background:#16281b; border:1px solid #2c6b3a; color:#9be2ab; }
+  #ir.erro { background:#2d1717; border:1px solid #7a2b2b; color:#ffb3ae; }
+  #ir .sp { flex:1; }
+  #ir button { height:22px; font-size:12px; }
   details.como { margin-top:14px; background:var(--box); border:1px solid var(--linha); border-radius:8px; padding:8px 12px; }
   details.como summary { cursor:pointer; color:var(--mut); }
   details.como p { line-height:1.55; margin:8px 0 0; }
@@ -61,6 +70,7 @@
 </header>
 <main>
   <div id="aviso" class="aviso">Carregando…</div>
+  <div id="ir" hidden><span id="irTxt"></span><span class="sp"></span><button id="irFechar" title="Fechar">✕</button></div>
   <section id="poke" class="card" hidden></section>
   <section id="reco" class="cards"></section>
   <div class="filtros" id="filtros" hidden>
@@ -75,7 +85,7 @@
     <input type="search" id="busca" placeholder="hunt ou região">
   </div>
   <table id="tabela" hidden>
-    <thead><tr><th>#</th><th>Hunt</th><th>Região</th><th class="r">XP do pokémon/h</th><th class="r">XP do treinador/h</th><th class="r">Ouro/h</th><th class="r">Abates/h</th><th class="r" title="Dano médio que ele toma por abate · o maior golpe de um selvagem, em % do HP de combate">Risco</th></tr></thead>
+    <thead><tr><th>#</th><th>Hunt</th><th>Região</th><th class="r">XP do pokémon/h</th><th class="r">XP do treinador/h</th><th class="r">Ouro/h</th><th class="r">Abates/h</th><th class="r" title="Dano médio que ele toma por abate · o maior golpe de um selvagem, em % do HP de combate">Risco</th><th class="r" title="Leva a conta escolhida no topo para a hunt (clique duas vezes: o 1º pede a confirmação)"></th></tr></thead>
     <tbody></tbody>
   </table>
   <button id="mais" hidden>Mostrar mais</button>
@@ -436,7 +446,7 @@
       case 'pokemon': return `Ritmo medido com este pokémon nesta hunt: ${medida} · ${golpes}`;
       case 'nosso': return `Ritmo medido pelas suas contas nesta hunt: ${medida} · ${golpes}`;
       case 'mapa': return `Ritmo medido pelas suas contas noutra hunt do mesmo mapa (${nomes(m.med.hunts)}; ${nv(m.med.n)} abates) · ${golpes}`;
-      case 'site': return `Ritmo do mapa ${m.mapa} medido pelo site PokéIdle Hub${m.indireto ? ' (com quase um golpe por abate; o golpe a mais foi descontado)' : ''} · ${golpes}${faixa}`;
+      case 'site': return `Ritmo do mapa ${m.mapa} ${RIT.site?.versaoJogo ? `calculado pelo simulador do jogo ${RIT.site.versaoJogo} (tabela do site PokéIdle Hub)` : 'medido pelo site PokéIdle Hub'}${m.indireto ? ' (com quase um golpe por abate; o golpe a mais foi descontado)' : ''} · ${golpes}${faixa}`;
       case 'bioma': return `≈ Hunt ainda não medida: o mapa que o jogo costuma dar às hunts de ${TIPOS[m.tipo]?.[0] ?? m.tipo} (${m.mapa}, o de ${m.bioma.acertos} das ${m.bioma.de} hunts vistas pelo site) · ${golpes}${faixa}`;
       case 'mediana': return `≈ Mapa${m.mapa ? ` ${m.mapa}` : ''} ainda não medido: a mediana dos mapas medidos · ${golpes}${faixa}`;
       default: return `≈ Sem a tabela de ritmo do site: ${dec(RITMO.padraoS, 2)} s por abate para quem mata de um golpe · ${golpes}`;
@@ -444,6 +454,52 @@
   }
 
   function aviso(txt) { const a = $('aviso'); a.hidden = !txt; a.textContent = txt || ''; }
+
+  // ---- O "Ir": leva a conta escolhida no topo para a hunt (main.js: huIr, o mesmo pedido do botão "Caçar" do mapa).
+  // O 1º clique arma a confirmação por 4 s; o 2º manda. O resultado (ou o erro do jogo) fica na faixa acima dos cards.
+  let IR = null, armado = null, armadoTimer = 0;
+  function botaoIr(r) {
+    if (!r) return '';
+    const indo = IR?.estado === 'indo';
+    let off = '', tit = `Levar a ${NOMES[conta] || 'conta'} para ${r.h.nome}`;
+    if (r.atual) { off = ' disabled'; tit = `A ${NOMES[conta] || 'conta'} já está aqui`; }
+    else if (!r.liberada) { off = ' disabled'; tit = `Trancada: pede treinador Nv ${nv(r.h.nivel)} e a ${NOMES[conta] || 'conta'} é Nv ${nv(D.nivel)}`; }
+    else if (indo) { off = ' disabled'; tit = 'Esperando a resposta do jogo da outra troca'; }
+    else if (r.morre || r.naoDerruba) tit += ' (atenção: pelo cálculo, ele cai aqui)';
+    else if (arriscada(r)) tit += ' (atenção: arriscada pelo cálculo)';
+    const arm = armado === r.h.slug && !off;
+    return `<button class="ir${arm ? ' confirma' : ''}" data-slug="${esc(r.h.slug)}" title="${esc(tit)}"${off}>${arm ? 'Confirmar?' : indo && IR.slug === r.h.slug ? 'Indo…' : 'Ir'}</button>`;
+  }
+  function mostrarIr() {
+    const b = $('ir');
+    b.hidden = !IR;
+    if (!IR) return;
+    b.className = IR.estado;
+    $('irTxt').textContent = IR.txt;
+  }
+  async function ir(slug) {
+    const r = R?.find(x => x.h.slug === slug), i = conta, nome = NOMES[i] || 'conta';
+    if (!r || IR?.estado === 'indo') return;
+    armado = null;
+    IR = { estado: 'indo', slug, txt: `Levando a ${nome} para ${r.h.nome}… (se estiver em batalha, espero a luta acabar, até 1 min)` };
+    render();
+    let res;
+    try { res = await api.huIr(i, slug); } catch (e) { res = { ok: false, msg: e.message }; }
+    const msg = String(res?.msg || '');
+    IR = { estado: res?.ok ? 'ok' : 'erro', slug, txt: res?.ok ? `✔ ${msg.charAt(0).toUpperCase()}${msg.slice(1)}.` : `✖ Não foi para ${r.h.nome}: ${msg}.` };
+    render();
+  }
+  document.addEventListener('click', e => {
+    const b = e.target.closest('button.ir');
+    if (!b || b.disabled) return;
+    const slug = b.dataset.slug;
+    clearTimeout(armadoTimer);
+    if (armado === slug) return ir(slug);
+    armado = slug;
+    armadoTimer = setTimeout(() => { armado = null; render(); }, 4000);
+    render();
+  });
+  $('irFechar').onclick = () => { IR = null; mostrarIr(); };
 
   function linhaSazonal() {
     const sz = D.sazonal;
@@ -456,7 +512,7 @@
   function linhaRitmo() {
     const vis = R.filter(r => r.mapa && (r.liberada || r.atual)), quantas = (...f) => vis.filter(r => f.includes(r.mapa.fonte)).length;
     const T = RIT.site, data = T?.geradoEm ? `${T.geradoEm.slice(8, 10)}/${T.geradoEm.slice(5, 7)}` : '';
-    const site = T ? `${quantas('site')} pela tabela do site PokéIdle Hub${data ? ` (de ${data})` : ''}`
+    const site = T ? `${quantas('site')} pela tabela do site PokéIdle Hub${T.versaoJogo || data ? ` (${[T.versaoJogo ? `simulador do jogo ${T.versaoJogo}` : '', data ? `de ${data}` : ''].filter(Boolean).join(', ')})` : ''}`
       : RIT.baixando ? 'baixando a tabela do site PokéIdle Hub…' : `sem a tabela do site PokéIdle Hub${RIT.erro ? ` (${esc(RIT.erro)})` : ''}`;
     const fora = NOSSO?.fora ? ` · <span title="Medições em que a luta simulada do pokémon não cabe no tempo medido (ele bate diferente do que o cálculo acha): ficam de fora">${NOSSO.fora} medição(ões) não usada(s)</span>` : '';
     return `<br><span class="mut">Ritmo das ${vis.length} hunts liberadas: ${quantas('pokemon', 'nosso', 'mapa')} pelo que as suas contas mediram · ${site} · ${quantas('bioma', 'mediana', 'padrao')} estimadas (≈)${fora}</span>`;
@@ -464,6 +520,7 @@
 
   function render() {
     for (const b of $('contas').children) b.classList.toggle('on', Number(b.dataset.i) === conta);
+    mostrarIr();
     if (!E) return aviso('Esperando o catálogo de espécies do app (na primeira vez ele lê os dados do jogo, uns segundos)…');
     if (!D) return aviso(`Lendo a ${NOMES[conta] || 'conta'}…`);
     if (D.erro) return aviso(`${NOMES[conta] || 'Conta'}: ${D.erro}.`);
@@ -495,7 +552,7 @@
     const top = k => [...validas].sort((x, y) => y[k] - x[k])[0];
     const mXp = top('xpPkH'), mOuro = top('ouroH');
     const ganho = (m, k) => (atual && !atual.naoDerruba && !atual.faltou && atual[k] > 0 && m !== atual ? ` <span class="ganho">+${pct(m[k] / atual[k] - 1)}</span>` : '');
-    const cartao = (rot, r, k, extra = '') => `<div class="card${extra}"><span class="mut">${rot}</span>
+    const cartao = (rot, r, k, extra = '') => `<div class="card${extra}">${k ? botaoIr(r) : ''}<span class="mut">${rot}</span>
       <b class="grande">${r ? esc(r.h.nome) : '—'} <span class="mut">${r ? `Nv ${nv(r.h.nivel)}` : ''}</span></b>
       ${r && !r.naoDerruba && !r.faltou ? `<span>${fmt(r.xpPkH)} XP/h${k === 'xpPkH' ? ganho(r, k) : ''}</span> · <span class="coin">${fmt(r.ouroH)} ouro/h</span>${k === 'ouroH' ? ganho(r, k) : ''}<br><span class="mut"><span title="${esc(fonteTxt(r))}">${estimado(r) ? '≈' : ''}${fmt(r.kh)} abates/h</span> · risco ${pct(r.risco)} · pior golpe ${pct(r.pior)}</span>` : `<span class="mut">${r?.naoDerruba ? 'ele não consegue derrubar estes selvagens' : r?.faltou ? 'espécie da hunt fora do catálogo do app' : D.noCentro ? 'no Centro Pokémon' : 'fora de hunt (ou hunt fora da lista)'}</span>`}</div>`;
     $('reco').innerHTML = cartao('Agora', atual, '') + cartao('Melhor para XP do pokémon', mXp, 'xpPkH', ' melhor') + cartao('Melhor para ouro', mOuro, 'ouroH', ' melhor');
@@ -537,8 +594,8 @@
       return `<tr class="${r.atual ? 'atual' : ''}${r.liberada ? '' : ' trancada'}"><td class="mut">${n + 1}</td><td>${esc(r.h.nome)} <span class="mut">Nv ${nv(r.h.nivel)}</span>${selos}</td>
         <td class="mut">${esc(r.regiao)}</td>${r.naoDerruba ? '<td class="r mut" colspan="4">ele não consegue derrubar estes selvagens</td>'
           : `<td class="r">${fmt(r.xpPkH)}</td><td class="r">${fmt(r.xpTrH)}</td><td class="r coin">${fmt(r.ouroH)}</td><td class="r${estimado(r) ? ' mut' : ''}" title="${esc(fonteTxt(r))}">${estimado(r) ? '≈' : ''}${fmt(r.kh)}</td>`}
-        <td class="r ${cls}">${r.naoDerruba ? '—' : `${pct(r.risco)} · ${pct(r.pior)}`}</td></tr>`;
-    }).join('') || '<tr><td colspan="8" class="mut">Nenhuma hunt com esses filtros.</td></tr>';
+        <td class="r ${cls}">${r.naoDerruba ? '—' : `${pct(r.risco)} · ${pct(r.pior)}`}</td><td class="r">${botaoIr(r)}</td></tr>`;
+    }).join('') || '<tr><td colspan="9" class="mut">Nenhuma hunt com esses filtros.</td></tr>';
     $('tabela').hidden = false;
     $('mais').hidden = linhas.length <= op.mostrar;
     $('mais').textContent = `Mostrar mais (${linhas.length - op.mostrar} restantes)`;

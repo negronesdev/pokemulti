@@ -1,10 +1,11 @@
-// Bandeja do Windows (16/11/2026, pedido de cliente): o app fica em segundo plano no canto da barra de tarefas, perto do
+// Bandeja do Windows (16/11/2026, pedido de cliente; no app pessoal desde 21/11/2026): o app fica em segundo plano no canto da barra de tarefas, perto do
 // relógio, com as contas rodando. Minimizar e o X mandam para a bandeja (padrão desde 16/11/2026, pedido do usuário); cada
 // um pode ser desligado no menu do ícone. Clique no ícone traz de volta; "Sair do PokeMulti" no menu fecha de verdade.
 // Esconder a janela não freia as contas: as páginas do jogo e das lives já rodam com backgroundThrottling desligado, igual
 // a quando o app está minimizado.
 const { app, Tray, Menu, Notification, BrowserWindow, nativeImage } = require('electron');
 const path = require('path');
+const NOME = 'PokeMulti'; // a venda troca para PokeMulti (gerar-venda.js)
 
 let tray = null, win = null, cfg = null, salvar = () => {}, log = () => {};
 let saindo = false, naBandeja = false;
@@ -40,7 +41,7 @@ function esconder() {
   const o = opcoes();
   if (!o.avisou && Notification.isSupported()) {
     o.avisou = true; salvar();
-    const n = new Notification({ title: 'PokeMulti', body: 'O PokeMulti continua rodando aqui na bandeja, com as contas abertas. Clique no ícone para voltar. Para fechar de vez, clique com o botão direito no ícone e escolha Sair.' });
+    const n = new Notification({ title: NOME, body: `O ${NOME} continua rodando aqui na bandeja, com as contas abertas. Clique no ícone para voltar. Para fechar de vez, clique com o botão direito no ícone e escolha Sair.` });
     n.on('click', mostrar);
     n.show();
   }
@@ -50,7 +51,7 @@ function esconder() {
 // do ícone; desligado de fábrica. Quem vale é o próprio Windows: se o cliente desligar no Gerenciador de Tarefas, a caixa
 // aparece desmarcada. O desinstalador apaga a entrada (empacotar.js); a atualização não mexe nela.
 // O getLoginItemSettings().openAtLogin só enxerga o nome padrão; por isso a busca pelo nome nos launchItems.
-const NOME_INICIO = process.env.PKM_TESTE_INICIO || 'PokeMulti';
+const NOME_INICIO = process.env.PKM_TESTE_INICIO || NOME;
 // (O instalador é por usuário e sempre usa a mesma pasta, então o caminho do exe não muda entre versões.)
 function abreComWindows() {
   try { return app.getLoginItemSettings({ path: process.execPath }).launchItems.some(x => x.name === NOME_INICIO && x.enabled); }
@@ -71,16 +72,19 @@ function sair() {
 function montarMenu() {
   const o = opcoes();
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Abrir o PokeMulti', click: mostrar },
+    { label: `Abrir o ${NOME}`, click: mostrar },
     { type: 'separator' },
     { label: 'Minimizar manda para a bandeja', type: 'checkbox', checked: o.minimizar, click: i => { o.minimizar = i.checked; salvar(); } },
     { label: 'O X manda para a bandeja (não fecha)', type: 'checkbox', checked: o.fechar, click: i => { o.fechar = i.checked; salvar(); } },
     { label: 'Abrir junto com o Windows', type: 'checkbox', checked: abreComWindows(), click: i => mudarComWindows(i.checked) },
     { type: 'separator' },
-    { label: 'Ajuda e novidades', click: () => { mostrar(); require('./ajuda.js').abrir('novidades'); } },
-    { label: 'Verificar atualizações', click: () => { mostrar(); require('./ajuda.js').abrir('novidades'); } },
+    // No app pessoal não há novidades nem atualização: só o tutorial
+    ...(require('./ajuda.js').comAtualizacao()
+      ? [{ label: 'Ajuda e novidades', click: () => { mostrar(); require('./ajuda.js').abrir('novidades'); } },
+         { label: 'Verificar atualizações', click: () => { mostrar(); require('./ajuda.js').abrir('novidades'); } }]
+      : [{ label: 'Ajuda', click: () => { mostrar(); require('./ajuda.js').abrir('ferramentas'); } }]),
     { type: 'separator' },
-    { label: 'Sair do PokeMulti', click: sair }
+    { label: `Sair do ${NOME}`, click: sair }
   ]));
 }
 
@@ -94,7 +98,7 @@ function ligar(janela, { config, salvarConfig, appLog }) {
 
   const icone = nativeImage.createFromPath(path.join(__dirname, 'bandeja.ico'));
   tray = new Tray(icone.isEmpty() ? nativeImage.createEmpty() : icone);
-  tray.setToolTip('PokeMulti');
+  tray.setToolTip(NOME);
   tray.on('click', mostrar);
   montarMenu();
 

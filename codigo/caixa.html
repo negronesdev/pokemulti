@@ -247,8 +247,11 @@
       `a <b>troca por SOL</b> (paga as taxas da rede) e a <b>saída manual</b> (sem número de pedido: dinheiro saindo por outro motivo). O app avisa; a decisão de sacar é sua.`;
     $('erro').textContent = s.erro ? `A última leitura da rede falhou: ${s.erro}. O app tenta de novo sozinho.` : '';
 
+    const p = s.painel, emUsdt = p?.taxas != null ? p.taxas - (p.taxasUsadas || 0) : null;
     $('kpis').innerHTML = [
-      kpi('Em caixa', usd(R.usdt), [variacao(R.var24, 'em 24 h'), variacao(R.var7, 'em 7 dias')].filter(Boolean).join(' · ')),
+      // O saldo da rede inclui as taxas do Mercado ainda em USDT; o "Em caixa" do jogo, não (é a parte dos jogadores)
+      kpi('Em caixa · na rede', R.usdt == null ? '—' : 'US$ ' + Math.round(R.usdt).toLocaleString('pt-BR'), [variacao(R.var24, 'em 24 h'), variacao(R.var7, 'em 7 dias')].filter(Boolean).join(' · ') +
+        (emUsdt != null && p.emCaixa != null ? `<br><span title="O jogo mostra só a parte dos jogadores; as taxas do Mercado que ainda estão em USDT ficam na mesma carteira">no jogo: ${usd(p.emCaixa)} + taxas ${usd(emUsdt)}</span>` : '')),
       kpi('SOL para as taxas', R.sol == null ? '—' : `${R.sol.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} SOL`, `aviso abaixo de ${s.lim.sol} SOL`),
       kpi('Saques em 24 h', String(R.nSaq24), `${usd(R.saq24)}${R.media14 != null ? ` · média de ${Math.round(R.media14)}/dia` : ''}`),
       kpi('Entradas em 24 h', usd(R.rec24), `${R.nRec24} recolhas de depósito`),
@@ -264,7 +267,6 @@
     grafCaixa($('g1'), P);
     grafFluxo($('g2'), P.slice(-30));
 
-    const p = s.painel, emUsdt = p?.taxas != null ? p.taxas - (p.taxasUsadas || 0) : null;
     $('painel').innerHTML = p ? `<div class="painel">${[
       kpi('Arrecadado', usd(p.arrecadado), 'depósitos, segundo o jogo'),
       kpi('Sacado pelos jogadores', usd(p.sacado), ''),

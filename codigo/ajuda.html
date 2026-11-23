@@ -40,13 +40,15 @@
   .ferr p { margin:2px 0 0; color:#d4d4da; }
   .ferr ol { margin:4px 0 0; padding-left:18px; color:#d4d4da; }
   .dica { color:var(--mut); font-size:13px; }
+  /* App pessoal: sem atualização, novidades, Premium e etiquetas de plano */
+  body.pessoal .so-venda, body.pessoal .tag, body:not(.pessoal) .so-pessoal { display:none; }
   kbd { background:#2a2a30; border:1px solid #444; border-radius:4px; padding:0 5px; font:12px ui-monospace, Consolas, monospace; }
 </style>
 </head>
 <body>
 <header>
   <h1>Ajuda do PokeMulti</h1>
-  <div class="atualizar">
+  <div class="atualizar so-venda">
     <span>Versão <b id="versao">…</b></span>
     <span id="verTxt"></span>
     <span class="sp"></span>
@@ -54,7 +56,7 @@
     <button id="verificar">Verificar atualizações</button>
   </div>
   <nav>
-    <button data-aba="novidades">✨ Novidades</button>
+    <button data-aba="novidades" class="so-venda">✨ Novidades</button>
     <button data-aba="ferramentas">📘 Tutorial das ferramentas</button>
   </nav>
 </header>
@@ -62,7 +64,8 @@
   <section class="aba" id="aba-novidades"></section>
 
   <section class="aba" id="aba-ferramentas">
-    <p class="dica">Os botões ficam na barra de cima do PokeMulti. Passe o mouse em cima de qualquer botão para ver o que ele faz. Os marcados com <span class="tag p">Premium</span> funcionam nos 7 dias grátis e depois com a key; os <span class="tag g">Grátis</span> funcionam sempre.</p>
+    <p class="dica so-pessoal">Os botões ficam na barra de cima. Passe o mouse em cima de qualquer botão para ver o que ele faz.</p>
+    <p class="dica so-venda">Os botões ficam na barra de cima do PokeMulti. Passe o mouse em cima de qualquer botão para ver o que ele faz. Os marcados com <span class="tag p">Premium</span> funcionam nos 7 dias grátis e depois com a key; os <span class="tag g">Grátis</span> funcionam sempre.</p>
 
     <div class="grupo">Primeiros passos</div>
     <div class="ferr"><div class="ico">👤</div><div><h3>As 4 contas <span class="tag g">Grátis</span></h3>
@@ -96,6 +99,8 @@
       <p>Guarda os preços do Mercado a cada 6 horas e mostra num gráfico o que sobe e o que desce. Avisa as oportunidades: o menor anúncio bem abaixo da média de venda.</p></div></div>
     <div class="ferr"><div class="ico">🐉</div><div><h3>Monitor de Pokémons <span class="tag p">Premium</span></h3>
       <p>As vendas reais de pokémon no Mercado, o preço por nota e as pechinchas, lidas pela Conta 1.</p></div></div>
+    <div class="ferr"><div class="ico">📡</div><div><h3>Radar do Mercado <span class="tag p">Premium</span></h3>
+      <p>Cada anúncio de pokémon avaliado pelas vendas reais: veredito (de CARO a EXCEPCIONAL), quanto está abaixo do mercado, o lucro já sem a taxa, a força e a oportunidade de 0 a 100. Põe uma etiqueta em cada card do Mercado do jogo e avisa quando aparece uma oportunidade.</p></div></div>
     <div class="ferr"><div class="ico">💲</div><div><h3>Precificador <span class="tag p">Premium</span></h3>
       <p>Quanto pedir, em gemas, por um pokémon das suas contas ou por uma ficha do jogo, com três preços: Vender rápido, Preço justo e Esperar. Usa as vendas guardadas pelo Monitor de Pokémons.</p></div></div>
     <div class="ferr"><div class="ico">💰</div><div><h3>Economia do RMT <span class="tag p">Premium</span></h3>
@@ -103,7 +108,7 @@
     <div class="ferr"><div class="ico">🛒</div><div><h3>Reposição automática <span class="tag p">Premium</span></h3>
       <p>Compra bolas, poções e revives na loja do jogo (em coins) quando o estoque de uma conta cai abaixo do número que você escolher, até o total que você definir. Tem teto de gasto por dia e começa desligada.</p></div></div>
     <div class="ferr"><div class="ico">🗺</div><div><h3>Melhor hunt <span class="tag p">Premium</span></h3>
-      <p>As hunts que mais rendem para o pokémon em campo de cada conta (XP, ouro e risco), simulando a luta com as regras do jogo.</p></div></div>
+      <p>As hunts que mais rendem para o pokémon em campo de cada conta (XP, ouro e risco), simulando a luta com as regras do jogo. O botão "Ir" de cada linha leva a conta escolhida para aquela hunt (clique duas vezes para confirmar); se ela estiver em batalha, espera a luta acabar.</p></div></div>
     <div class="ferr"><div class="ico">🏆</div><div><h3>Caça do Top Catch <span class="tag p">Premium</span></h3>
       <p>Numa conta, vai de hunt em hunt atrás das espécies que ainda faltam no Top Catch da semana, primeiro as hunts com mais espécies faltando.</p>
       <ol><li>Escolha a conta e o tempo máximo em cada hunt.</li>
@@ -115,7 +120,7 @@
     <div class="ferr"><div class="ico">🔍</div><div><h3>Pokédex do Mini Games <span class="tag p">Premium</span></h3>
       <p>As sombras de todas as espécies do jogo, filtradas pelas pistas que você marcar, para acertar o "quem é esse pokémon". Não conversa com o jogo.</p></div></div>
     <div class="ferr"><div class="ico">📺</div><div><h3>Lives da Twitch e da Kick <span class="tag p">Premium</span></h3>
-      <p>O painel de lives da conta selecionada (<kbd>Ctrl</kbd>+<kbd>T</kbd>): entre na Twitch e na Kick uma vez e deixe as lives do jogo tocando para ganhar os bônus. O vídeo continua rodando mesmo nos modos leves, porque é ele que dá os pontos.</p></div></div>
+      <p>O painel de lives da conta selecionada (<kbd>Ctrl</kbd>+<kbd>T</kbd>): entre na Twitch e na Kick uma vez e deixe as lives do jogo tocando para ganhar os bônus. O vídeo continua rodando mesmo nos modos leves, porque é ele que dá os pontos. Uma live da Kick que fica 20 minutos sem dar ponto é recarregada; se continuar parada, o app troca por outra.</p></div></div>
     <div class="ferr"><div class="ico">🏦</div><div><h3>Caixa do projeto <span class="tag p">Premium</span></h3>
       <p>A carteira do jogo na rede Solana, de onde saem os saques. Lê as transações a cada 10 minutos (dados públicos) e avisa quando sai dinheiro que não é saque, quando o caixa cai rápido ou quando os saques param.</p></div></div>
 
@@ -123,12 +128,12 @@
     <div class="ferr"><div class="ico">🛟</div><div><h3>Vigias das contas <span class="tag p">Premium</span></h3>
       <p>Recarregam sozinhas a conta que perdeu a conexão por 3 minutos, a que ficou presa na abertura do jogo e a que está numa hunt mas parou de receber o combate há 5 minutos (sessão zumbi). Não mexem na conta que entrou em outro lugar. Avisam no Windows quando a recarga não resolve.</p></div></div>
     <div class="ferr"><div class="ico">🗳</div><div><h3>Voto do IdleHub <span class="tag p">Premium</span></h3>
-      <p>Quando o voto de uma conta libera, aparece um selo amarelo na aba dela. Clique no selo: o voto abre numa janela do app, com o login daquela conta (Google ou Discord).</p></div></div>
+      <p>Quando o voto de uma conta libera, aparece um selo amarelo na aba dela. Clique no selo ou no aviso do Windows: a janela do voto já vem carregada, com o login daquela conta (Google ou Discord). Você vota; quando o voto entra, a janela fecha sozinha e abre a da próxima conta.</p></div></div>
     <div class="ferr"><div class="ico">🖥</div><div><h3>Bandeja e abrir com o Windows <span class="tag g">Grátis</span></h3>
       <p>Minimizar e o X deixam o PokeMulti rodando perto do relógio, com as contas abertas. Clique no ícone para voltar. Com o botão direito no ícone: "Sair do PokeMulti", "Abrir junto com o Windows" e "Verificar atualizações".</p></div></div>
-    <div class="ferr"><div class="ico">⬆</div><div><h3>Atualizações <span class="tag g">Grátis</span></h3>
+    <div class="ferr so-venda"><div class="ico">⬆</div><div><h3>Atualizações <span class="tag g">Grátis</span></h3>
       <p>O app confere sozinho se saiu versão nova e mostra o botão "⬆ Nova versão" na barra. Você também pode conferir na hora em "Verificar atualizações", no alto desta janela. A atualização baixa, confere a assinatura, instala e abre o app de novo, com os logins guardados.</p></div></div>
-    <div class="ferr"><div class="ico">⭐</div><div><h3>Premium <span class="tag g">Grátis</span></h3>
+    <div class="ferr so-venda"><div class="ico">⭐</div><div><h3>Premium <span class="tag g">Grátis</span></h3>
       <p>Os 7 primeiros dias são de Premium grátis. Depois, o app continua grátis com o jogo nas 4 contas. Clique no botão ⭐ da barra para ver como assinar e colar a key.</p></div></div>
   </section>
 </main>
@@ -147,6 +152,15 @@
 
   api.ajudaDados().then(d => {
     $('versao').textContent = d.versao;
+    if (!d.venda) {
+      // App pessoal: o nome dele no lugar de PokeMulti, e o tutorial direto
+      document.body.classList.add('pessoal');
+      const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      for (let n; (n = w.nextNode());) if (n.nodeValue.includes('PokeMulti')) n.nodeValue = n.nodeValue.split('PokeMulti').join(d.nome);
+      document.title = document.title.split('PokeMulti').join(d.nome);
+      mostrar('ferramentas');
+      return;
+    }
     $('aba-novidades').innerHTML = d.novidades.map(v => `<div class="versao${v.versao === d.versao ? ' atual' : ''}">
       <h2>Versão ${esc(v.versao)} <small>${esc(v.data)}</small>${v.versao === d.versao ? '<span class="selo">a sua</span>' : ''}</h2>
       ${v.itens.map(([t, x]) => `<p class="item"><b>${esc(t)}:</b> ${esc(x)}</p>`).join('')}</div>`).join('')
