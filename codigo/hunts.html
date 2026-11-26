@@ -95,7 +95,7 @@
     <p><b>A luta, simulada aqui com as regras da Pokepédia:</b> dano = ((2 × nível/5 + 2) × poder × ataque/defesa)/50 + 2, × 1,5 de STAB, × efetividade de tipo ampliada na hunt (×2 vira ×2,5; ×0,5 vira ×0,33), × 0,925 (a média do aleatório 0,85–1,00). A cada ataque ele usa o golpe pronto de maior dano contra aquele alvo; com todos recarregando, a Investida (poder 30, física, no tipo dele). As recargas são as do jogo, encurtadas pelo Speed da espécie e pelo IV de SPD, e passam de um abate para o outro; entre golpes seus há 0,9 s (menos 10 ms por ponto de IV de SPD). O selvagem tem HP ×5, bate ×1,8 e no máximo a cada 1,4 s.</p>
     <p><b>O ritmo (desde 28/10, as hunts "em bandos"):</b> a onda volta 2,8 s depois do último abate, e o tempo entre um abate e outro é a caminhada até o próximo bando, que depende do <b>mapa</b>: quem mata de um golpe leva de 2,3 a 5,6 s por abate, conforme o mapa. As hunts de Johto em diante usam um mapa de Kanto ou da Outland. Por abate = tempo morto + luta (48 abates seguidos, os selvagens na proporção dos pontos de spawn, as recargas correndo no tempo morto), e quem luta mais anda menos, porque o bando vem até ele enquanto ele luta: o tempo morto cai até ~1,4 s de caminhada com luta longa.</p>
     <p><b>De onde vem o tempo de cada mapa:</b> 1) do que as suas 4 contas mediram (20 abates em 3 minutos na mesma hunt, com o mesmo pokémon, descontada a luta simulada dele): a medida de quem mata de um golpe (até 1,4 golpe por abate) é a caminhada do mapa e vale para todo pokémon, nesta hunt e nas outras do mesmo mapa; com mais golpes, ela depende demais do cálculo da luta e só vale para o mesmo pokémon nesta hunt; 2) hunt sem medida aparece com ≈: vale um tempo médio por abate (passe o mouse nos abates/h para ver de onde veio e a faixa). Com 3 minutos e 20 abates na hunt atual, os bônus de XP e de ouro que a calculadora do jogo não conhece (Twitch, Kick e Sacrifício) também passam a sair do medido.</p>
-    <p><b>O dia sazonal:</b> o tipo do dia vem da conta (o jogo sorteia às 18h de Brasília). Nas hunts do Mapa todo pokémon desse tipo, o seu e os selvagens, causa o dobro de dano e leva um quarto (dobro de ataque, defesa e vida, como o jogo conta).</p>
+    <p><b>O dia sazonal:</b> o tipo do dia vem da conta (o jogo sorteia às 18h de Brasília). Nas hunts do Mapa todo pokémon desse tipo, o seu e os selvagens, causa o dobro de dano e leva um quarto (dobro de ataque, defesa e vida, como o jogo conta). Com o Shield do Novato (conta abaixo do nível do Boost dos Atrasados do dia), os selvagens do tipo ficam normais e só o seu pokémon ganha o dobro.</p>
     <p><b>Estimativas nossas:</b> o selvagem nasce com IV médio (16,5), qualidade 1 e potência I; um selvagem por vez, que bate do começo da luta até cair; poções e eventos não entram. Antes da medição, os bônus de XP da Twitch, da Kick e do Sacrifício também não (eles multiplicam todas as hunts igual, então não mudam a ordem). Com TM AoE, quanto ele rende a mais que um alvo só sai da medida na hunt atual (o mesmo fator em todas as hunts); antes dela, os alvos por golpe são uma estimativa sua (o tempo por abate divide por eles). O Z-Move entra como golpe (poder 2800, recarga de 60 s), sem a área 3×3.</p>
   </details>
 </main>
@@ -193,13 +193,16 @@
 
   // Os selvagens da hunt contra ele (o dano dos dois lados, com o dia sazonal) e a ordem dos 48 abates, na proporção
   // dos pontos de spawn: o que não depende do ritmo
-  function preparar(h, he, saz) {
+  // Com o Shield do Novato (esc), o selvagem do tipo do dia não ganha nada: nem o ×2 no dano dele nem o ¼ no que leva.
+  // O pokémon da conta continua com os dois (26/11/2026, aviso de cliente: o Camerupt no dia de Fogo)
+  function preparar(h, he, saz, esc = false) {
     const total = h.especies.reduce((s, e) => s + e[1], 0) || 1;
     const lista = [];
     for (const [id, pts] of h.especies) {
       const w = selvagem(id, h.nivel);
       if (!w) return { faltou: true };
-      const mEu = multSaz(saz, he.tipos, w.tipos), mEle = multSaz(saz, w.tipos, he.tipos);
+      const tiposW = saz && esc ? [] : w.tipos;
+      const mEu = multSaz(saz, he.tipos, tiposW), mEle = multSaz(saz, tiposW, he.tipos);
       const danos = he.golpes.map(g => dano(he.nivel, g.poder, g.fis ? he.atk : he.spAtk, g.fis ? w.def : w.spDef, he.tipos.includes(g.tipo), efet(g.tipo, w.tipos)) * mEu);
       // A Investida sai no 1º tipo dele; no 2º só se o alvo for imune ao 1º
       const tInv = efet(he.tipos[0], w.tipos) === 0 && he.tipos[1] ? he.tipos[1] : he.tipos[0];
@@ -327,7 +330,7 @@
     if (cacheCorrida.has(k)) return cacheCorrida.get(k);
     if (cacheCorrida.size > 400) cacheCorrida.clear();
     let r = null;
-    const he = montarHeroi(c.heroi), p = preparar(h, he, c.saz || null);
+    const he = montarHeroi(c.heroi), p = preparar(h, he, c.saz || null, !!c.esc);
     if (!p.faltou) {
       const med = (c.ultimo - c.inicio) / (c.abates - 1) / 1000, f = s => porAbate(p, he, s)?.seg ?? Infinity;
       let lo = 1, hi = 15;
@@ -403,7 +406,7 @@
     NOSSO = nossoRitmo();
     R = D.hunts.map(h => {
       const r = { h, regiao: regiaoDe(h), liberada: h.nivel <= D.nivel, atual: h.slug === D.huntSlug };
-      const p = preparar(h, H, saz);
+      const p = preparar(h, H, saz, !!D.sazonal?.escudo);
       if (p.faltou) return { ...r, faltou: true };
       const mapa = tempoDoMapa(h), a = porAbate(p, H, mapa.s);
       if (!a) return { ...r, mapa, naoDerruba: true };
@@ -505,8 +508,12 @@
     const sz = D.sazonal;
     if (!sz?.tipo) return '';
     const ate = sz.fim ? ` (até as ${new Date(sz.fim).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })})` : '';
-    const efeito = H.tipos.includes(sz.tipo) ? 'o seu pokémon é desse tipo: causa o dobro de dano e leva um quarto'
-      : 'o seu pokémon não é desse tipo; os selvagens que forem causam o dobro de dano e levam um quarto';
+    const meu = H.tipos.includes(sz.tipo);
+    const efeito = sz.escudo
+      ? `Shield do Novato ativo (até o Nv ${nv(sz.alvo)}): os selvagens desse tipo não ficam mais fortes contra você`
+        + (meu ? '; o seu pokémon é desse tipo e continua com o dobro' : '')
+      : meu ? 'o seu pokémon é desse tipo: causa o dobro de dano e leva um quarto'
+        : 'o seu pokémon não é desse tipo; os selvagens que forem causam o dobro de dano e levam um quarto';
     return `<br><span class="mut">Dia sazonal${ate}:</span>${chipTipo(sz.tipo)}<span class="mut"> — ${efeito}${op.sazonal ? '' : ' (fora da conta: desmarcado abaixo)'}</span>`;
   }
   function linhaRitmo() {

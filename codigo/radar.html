@@ -61,6 +61,7 @@
   <select id="minimo"><option value="">Todos os vereditos</option><option value="justo">JUSTO ou melhor</option><option value="bom">BOM ou melhor</option><option value="otimo">ÓTIMO ou melhor</option></select>
   <input type="search" id="busca" placeholder="Espécie ou vendedor">
   <label class="liga"><input type="checkbox" id="soShiny"> Só shiny</label>
+  <label class="liga" title="Esconde os pokémon de Outland da lista, dos avisos e das etiquetas no Mercado do jogo"><input type="checkbox" id="semOutland"> Sem Outland</label>
   <span class="mut">Até</span> <input type="number" id="teto" min="0" placeholder="preço">
   <span class="mut" title="Quantas vendas parecidas, no mínimo, para o valor não ser 'aproximado' (abaixo disso o veredito vai no máximo até BOM)">Vendas mín.</span> <input type="number" id="minVendas" min="2" max="20">
   <span class="sp"></span>
@@ -205,11 +206,12 @@
       $('varrer').checked = s.opcoes.varrer;
       $('varrerMin').value = s.opcoes.varrerMin;
       $('minVendas').value = s.opcoes.minVendas;
+      $('semOutland').checked = s.opcoes.semOutland;
     }
     status();
     desenhar();
   });
-  for (const id of ['etiquetas', 'alertas', 'varrer']) $(id).onchange = () => api.rdOpcoes({ [id]: $(id).checked });
+  for (const id of ['etiquetas', 'alertas', 'varrer', 'semOutland']) $(id).onchange = () => api.rdOpcoes({ [id]: $(id).checked });
   $('alertaMin').onchange = () => api.rdOpcoes({ alertaMin: $('alertaMin').value });
   $('varrerMin').onchange = () => api.rdOpcoes({ varrerMin: Number($('varrerMin').value) });
   $('minVendas').onchange = () => api.rdOpcoes({ minVendas: Number($('minVendas').value) });

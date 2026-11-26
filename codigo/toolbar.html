@@ -67,6 +67,7 @@
   <button id="ec" title="Economia do RMT: cotação gema ⇄ coin, melhores rotas de conversão, ciclos e flips (com os dados que o app já coleta)">💰<span class="lbl"> Economia</span></button>
   <button id="pk" title="Monitor de Pokémons do RMT: vendas reais, preço por nota e pechinchas (pela Conta 1)">🐉<span class="lbl"> Pokémons</span></button>
   <button id="rd" title="Radar do Mercado: cada anúncio de pokémon avaliado pelas vendas reais (veredito, quanto está abaixo do mercado, lucro e força), etiqueta nos cards do Mercado do jogo e aviso das oportunidades">📡<span class="lbl"> Radar</span></button>
+  <button id="sy" title="Monitor de Shiny: todo shiny capturado no jogo (quem pegou, qual e quando), anunciado no chat. Clique num para ver a ficha dele.">✨<span class="lbl"> Shiny</span></button>
   <button id="pr" title="Precificador: quanto pedir, em gemas, por um pokémon das suas contas ou por uma ficha do jogo (Vender rápido, Preço justo e Esperar)">💲</button>
   <button id="pc" title="Monitor de Preços do RMT: registro a cada 6 h e gráfico do que sobe e desce (pela Conta 1)">📈<span class="lbl"> Preços</span></button>
   <button id="sn" title="Sniper do Mercado (RMT): cada conta compra sozinha os alvos da lista dela, até o preço máximo">🎯<span class="lbl"> Sniper</span></button>
@@ -182,6 +183,7 @@
   document.getElementById('pk').onclick = () => api.pkAbrir();
   document.getElementById('pr').onclick = () => api.prAbrir();
   document.getElementById('rd').onclick = () => api.rdAbrir();
+  document.getElementById('sy').onclick = () => api.shAbrir();
   document.getElementById('ec').onclick = () => api.ecAbrir();
   document.getElementById('pd').onclick = () => api.pdAbrir();
   document.getElementById('rep').onclick = () => api.repAbrir();
@@ -208,7 +210,7 @@
       : (l.modo === 'teste' ? `Premium grátis até ${l.ateTxt}` : `Premium até ${l.ateTxt}`) + '. Depois, o app continua grátis só com o jogo nas 4 contas. Clique para ver como renovar e colar a key.';
     b.classList.toggle('lic-aviso', gratis || (!perm && l.dias <= 5));
     document.body.classList.toggle('gratis', gratis);
-    for (const id of ['pd', 'rep', 'hu', 'cx', 'ec', 'pk', 'rd', 'pr', 'pc', 'sn', 'tw', 'tc', 'tema']) document.getElementById(id).classList.toggle('premium', gratis);
+    for (const id of ['pd', 'rep', 'hu', 'cx', 'ec', 'pk', 'rd', 'sy', 'pr', 'pc', 'sn', 'tw', 'tc', 'tema']) document.getElementById(id).classList.toggle('premium', gratis);
     const n = document.getElementById('nova');
     n.style.display = l.nova ? '' : 'none';
     if (!n.disabled) n.title = `Saiu a versão ${l.nova}. Clique para atualizar: o app baixa, confere, instala e abre de novo sozinho. Seus logins e ajustes continuam guardados.`;

@@ -404,10 +404,15 @@ const WS_ESCUTA = `(() => {
         const abate = d.indexOf('"k":"morte"') >= 0; // e cada abate, para o ritmo medido dela
         const golpe = d.indexOf('"por":"jogador"') >= 0; // e cada golpe dele (golpes por abate)
         const tcm = d.indexOf('"topCatch') >= 0 || d.indexOf('"trocaLivreEm"') >= 0; // a 🏆 Caça do Top Catch
-        if (!tw && !kk && !item && !evMk && !loja && !est && !abate && !golpe && !tcm) return;
+        // ✨ Monitor de Shiny: os anúncios de shiny do chat (e o histórico do chat na entrada) e a ficha pedida
+        const shy = d.indexOf('"shinyCaptura"') >= 0 || d.indexOf('"lendarioCaptura"') >= 0;
+        const fic = d.indexOf('"ranking.ficha"') >= 0;
+        if (!tw && !kk && !item && !evMk && !loja && !est && !abate && !golpe && !tcm && !shy && !fic) return;
         try {
           const m = JSON.parse(d);
           if (m.t === 'erro') window.__pkmErro = { em: Date.now(), chave: String(m.chave || ''), msg: String(m.msg || '') };
+          if (shy) { try { window.__pkmShinyChat?.(m); } catch {} }
+          if (fic && m.t === 'ranking.ficha') { try { window.__pkmShinyFichaResp?.(m); } catch {} }
           if (m.t === 'welcome' && Array.isArray(m.catalogoBolas)) {
             window.__pkmCatBolas = m.catalogoBolas.map(b => ({ id: b.id, nome: b.nome, preco: b.priceGold, compravel: !!b.compravel }));
           }
@@ -532,12 +537,16 @@ const HUNT_ESCUTA = `(() => {
       tmAoe: !!(p.tmAoe ?? p.tm_aoe), tmElemental: p.tmElemental || null, tmFisico: p.tmFisico ?? null };
   };
   const valeu = r => r.abates >= 21 && r.ultimo - r.inicio >= 180000;
+  // O Shield do Novato (shared/dia-sazonal.mjs: escudoSazonal): abaixo do nível do Boost dos Atrasados do dia, os
+  // selvagens do tipo sazonal não ficam mais fortes contra a conta; o pokémon dela continua com o ×2 (26/11/2026)
+  const escudoDe = eu => { const a = Number(eu?.loja?.alvoAtrasados), n = Number(eu?.level); return Number.isFinite(a) && a > 1 && Number.isFinite(n) && n < a; };
   window.__pkmContarAbate = e => {
     const eu = window.__pkmEu, slug = eu?.huntSlug || '', pk = eu?.activeId ?? null, saz = eu?.diaSazonal?.tipo || '', agora = Date.now();
+    const esc = !!saz && escudoDe(eu);
     let r = window.__pkmRitmo;
-    if (!r || r.slug !== slug || r.pk !== pk || r.saz !== saz || agora - r.ultimo > 120000) {
+    if (!r || r.slug !== slug || r.pk !== pk || r.saz !== saz || !!r.esc !== esc || agora - r.ultimo > 120000) {
       if (r && valeu(r)) { const p = (window.__pkmRitmosProntos ||= []); p.push({ ...r }); if (p.length > 30) p.shift(); }
-      r = window.__pkmRitmo = { slug, pk, saz, inicio: agora, ultimo: agora, abates: 0, golpes: 0, xpPk: 0, xpTr: 0, ouro: 0, heroi: null, heroiEm: 0 };
+      r = window.__pkmRitmo = { slug, pk, saz, esc, inicio: agora, ultimo: agora, abates: 0, golpes: 0, xpPk: 0, xpTr: 0, ouro: 0, heroi: null, heroiEm: 0 };
     }
     r.abates++;
     r.ultimo = agora;
@@ -595,11 +604,12 @@ const HUNT_ESCUTA = `(() => {
     const r = window.__pkmRitmo;
     return {
       em: agora, nivel: Number(eu.level) || 0, huntSlug: eu.huntSlug || '', noCentro: !!eu.noCentro,
-      sazonal: eu.diaSazonal?.tipo ? { tipo: String(eu.diaSazonal.tipo), fim: Number(eu.diaSazonal.fim) || 0 } : null,
+      sazonal: eu.diaSazonal?.tipo ? { tipo: String(eu.diaSazonal.tipo), fim: Number(eu.diaSazonal.fim) || 0,
+        escudo: escudoDe(eu), alvo: Number(eu.loja?.alvoAtrasados) || 0 } : null,
       multTr: ha.multXpTreinador(eu, agora, tb), multPk: ha.multXpPokemon(eu, agora, tb), bonusLoot: bonus,
       amp: base.amp, multHp: base.multHp, multDano: base.multDano,
       regras: { onda: ha.MS_ONDA, maxMobs: ha.MAX_MOBS, intervalo: ha.CD_GOLPE_MS, desloc: ha.MS_DESLOC_MS, espera: ha.CD_MOVIMENTO_MEDIO_MS ?? 2000, tetoSpeed: cg.SPEED_POTENCIAL_TETO_PCT },
-      matriz, hunts, medido: r ? { slug: r.slug, pk: r.pk, saz: r.saz, inicio: r.inicio, ultimo: r.ultimo, abates: r.abates, golpes: r.golpes, xpPk: r.xpPk, ouro: r.ouro } : null,
+      matriz, hunts, medido: r ? { slug: r.slug, pk: r.pk, saz: r.saz, esc: !!r.esc, inicio: r.inicio, ultimo: r.ultimo, abates: r.abates, golpes: r.golpes, xpPk: r.xpPk, ouro: r.ouro } : null,
       ativo: pk && { id: pk.id, nome: pk.nome || '', speciesId: pk.speciesId, level: pk.level, shiny: !!pk.shiny, potencia: pk.potencia,
         quality: pk.quality ?? pk.qualidade, ivs: pk.ivs || null, stats: pk.stats || null, maxHp: pk.maxHp ?? null, tipos: pk.tipos || null,
         tmAoe: !!(pk.tmAoe ?? pk.tm_aoe), zmove: pk.tmElemental ? tm.golpeTmElemental(pk.tmElemental, pk.tmFisico) : null }
@@ -2411,9 +2421,14 @@ const rdOpcoes = () => {
     alertaMin: RD.NIVEL[o.alertaMin] >= RD.NIVEL.bom ? o.alertaMin : 'otimo',
     varrer: o.varrer !== false,
     varrerMin: Math.min(30, Math.max(2, Number(o.varrerMin) || 3)),
-    minVendas: Math.min(20, Math.max(2, Number(o.minVendas) || 4))
+    minVendas: Math.min(20, Math.max(2, Number(o.minVendas) || 4)),
+    semOutland: o.semOutland === true
   });
 };
+// Pokémon de Outland (shared/outland.mjs: isOutlandPokeId, e os ids antigos de antes do remapeamento). Com "Sem Outland"
+// (26/11/2026, pedido do dono) eles saem da lista, dos avisos e das etiquetas no Mercado.
+const rdOutland = sp => (sp >= 2001 && sp < 2059) || (sp >= 10501 && sp < 10548);
+const rdEscondido = a => rdOpcoes().semOutland && rdOutland(Number(a?.especie));
 
 // O contexto das vendas, refeito quando chega venda nova: por espécie, moeda e shiny, as notas vendidas (a raridade), as
 // vendas dos 7 dias (se vende rápido), as dos 30 dias (vendas parecidas e a venda recente perto do preço) e a tendência
@@ -2530,6 +2545,7 @@ async function rdColher(i) {
         if (++feitos % 8 === 0) await new Promise(r => setImmediate(r)); // cede a vez ao resto do app
       }
       rdAnuncios.set(a.id, { visto: agora, a, av, precoAv: a.preco, avEm: ja && av === ja.av ? ja.avEm : agora, ctx: c.chave, desde: ja?.desde ?? agora });
+      if (rdEscondido(a)) continue; // Sem Outland: nem etiqueta nem aviso
       marcas.push({ k: rdChaveCard(a), p: a.preco, av: { v: av.v, vs: av.vs, med: av.med, n: av.n, rar: av.rar, iu: av.iu, f: av.f, op: av.op, lucro: av.lucro, aprox: av.aprox, motivos: av.motivos } });
       if (RD.atende(av.v, rdOpcoes().alertaMin) && !(rdAvisados.get(a.id) <= a.preco)) { rdAvisados.set(a.id, a.preco); novos.push({ a, av }); }
     }
@@ -2594,7 +2610,7 @@ function rdEnviar() {
   if (!rdWin || rdWin.isDestroyed()) return;
   const o = rdOpcoes();
   rdWin.webContents.send('rdstate', {
-    anuncios: [...rdAnuncios.values()].map(x => ({ ...x.a, ...x.av, visto: x.visto, desde: x.desde })),
+    anuncios: [...rdAnuncios.values()].filter(x => !rdEscondido(x.a)).map(x => ({ ...x.a, ...x.av, visto: x.visto, desde: x.desde })),
     opcoes: o, rotulos: RD.ROTULO, motivos: RD.MOTIVOS, ultVarredura: rdUltVarredura, varrendo: rdVarrendo, aviso: rdAviso,
     vendas: pkmLer().vendas.length, agora: Date.now()
   });
@@ -2623,7 +2639,7 @@ function abrirRadar() {
 
 function rdSalvarOpcoes(novo) {
   const o = rdOpcoes();
-  for (const k of ['etiquetas', 'alertas', 'varrer']) if (k in (novo ?? {})) o[k] = !!novo[k];
+  for (const k of ['etiquetas', 'alertas', 'varrer', 'semOutland']) if (k in (novo ?? {})) o[k] = !!novo[k];
   for (const k of ['varrerMin', 'minVendas']) if (k in (novo ?? {})) o[k] = Number(novo[k]);
   if (typeof novo?.alertaMin === 'string') o.alertaMin = novo.alertaMin;
   rdOpcoes();
@@ -2637,6 +2653,214 @@ ipcMain.on('rd:abrir', () => abrirRadar());
 ipcMain.on('rd:opcoes', (_e, novo) => rdSalvarOpcoes(novo));
 ipcMain.on('rd:agora', () => rdVarrer(true));
 ipcMain.on('rd:limpar', () => { rdAnuncios.clear(); rdAvisados.clear(); rdEnviar(); });
+
+// ---------- ✨ Monitor de Shiny: quem capturou cada shiny do jogo e quando (26/11/2026, pedido do dono) ----------
+// De onde vem: o jogo anuncia no chat Mundo toda captura de shiny ("O JOGADOR x ACABA DE CAPTURAR UM SHINY y", ou "CHOCOU
+// UM OVO SHINY"), com o nick, o nome e o id do pokémon (m.shinyCaptura), e o lendário/mítico shiny (m.lendarioCaptura
+// com shiny). A escuta das 4 contas pega esses anúncios e o histórico do chat que chega na entrada (chat.historico); o
+// mesmo anúncio visto por várias contas entra uma vez só. Registrar não pede nada ao jogo: só lê o que já chega.
+// A ficha: um pedido por clique, o mesmo do jogo (chat.verPokemon), com `dica: true` para o jogo não abrir a ficha na
+// tela da conta (a resposta, ranking.ficha, cai no cache de dicas da guerra de guilds, que só desenha se pedida lá).
+// "Abrir no jogo" manda o pedido sem a dica: aí o próprio jogo abre a ficha dele na conta.
+const SH_MAX = 30000;
+const shPath = () => path.join(app.getPath('userData'), 'shiny-capturas.json');
+let shDados = null, shWin = null, shSalvarRelogio = null, shCatCache = null, shEspCache = null;
+function shLer() {
+  if (shDados) return shDados;
+  try { shDados = JSON.parse(fs.readFileSync(shPath(), 'utf8')); } catch {}
+  if (!Array.isArray(shDados?.lista)) shDados = { lista: [] };
+  return shDados;
+}
+function shSalvar() {
+  clearTimeout(shSalvarRelogio);
+  shSalvarRelogio = setTimeout(() => {
+    try { fs.writeFileSync(shPath(), JSON.stringify(shLer())); } catch (e) { appLog(`shiny: não consegui salvar (${e.message})`); }
+  }, 3000);
+}
+const shOpcoes = () => {
+  cfg.shiny ??= {};
+  const o = cfg.shiny;
+  o.avisar = ['nada', 'lista', 'todos'].includes(o.avisar) ? o.avisar : 'nada';
+  o.lista = typeof o.lista === 'string' ? o.lista.slice(0, 500) : '';
+  return o;
+};
+// A espécie pelo nome do anúncio (o nome do jogo, como na Pokédex): para o retrato
+function shEspecie(nome) {
+  const d = jogoLer();
+  if (!d?.especies) return 0;
+  if (shEspCache?.em !== d.em) {
+    const m = new Map();
+    for (const [id, e] of Object.entries(d.especies).sort((a, b) => a[0] - b[0])) { const k = String(e?.n || '').toLowerCase(); if (k && !m.has(k)) m.set(k, Number(id)); }
+    shEspCache = { em: d.em, m };
+  }
+  return shEspCache.m.get(String(nome || '').toLowerCase().trim()) || 0;
+}
+const shChave = c => c.pk ? `${String(c.nick).toLowerCase()}|${c.pk}` : `${String(c.nick).toLowerCase()}|${c.nome}|${Math.round(c.em / 60000)}`;
+const shColhendo = new Set();
+async function shColher(i) {
+  if (shColhendo.has(i)) return;
+  shColhendo.add(i);
+  try {
+    await espera(300); // junta o que chega em sequência (o histórico vem de uma vez)
+    const wc = views[i]?.webContents;
+    if (!wc || wc.isDestroyed()) return;
+    const lista = await wc.executeJavaScript('window.__pkmShinyTirar ? window.__pkmShinyTirar() : []').catch(() => []);
+    if (!Array.isArray(lista) || !lista.length) return;
+    const d = shLer(), vistos = new Set(d.lista.map(shChave)), novos = [];
+    for (const c of lista) {
+      if (!c?.nick || !c.nome) continue;
+      const k = shChave(c);
+      if (vistos.has(k)) continue;
+      vistos.add(k);
+      const x = { em: Number(c.em) || Date.now(), nick: String(c.nick).slice(0, 40), pk: Number(c.pk) || 0, nome: String(c.nome).slice(0, 60),
+        ovo: !!c.ovo, lend: !!c.lend, mit: !!c.mit, sp: shEspecie(c.nome), conta: i };
+      d.lista.push(x);
+      novos.push(x);
+    }
+    if (!novos.length) return;
+    d.lista.sort((a, b) => a.em - b.em);
+    if (d.lista.length > SH_MAX) d.lista.splice(0, d.lista.length - SH_MAX);
+    shSalvar();
+    shAvisar(novos.filter(x => Date.now() - x.em < 10 * 60000)); // o histórico antigo entra calado
+    shEnviarLogo();
+  } catch (e) {
+    appLog(`shiny: erro (${e.message})`);
+  } finally {
+    shColhendo.delete(i);
+  }
+}
+function shAvisar(novos) {
+  const o = shOpcoes();
+  if (o.avisar === 'nada' || !novos.length || !Notification.isSupported()) return;
+  const quero = o.lista.split(/[,;\n]/).map(s => s.trim().toLowerCase()).filter(Boolean);
+  const vale = o.avisar === 'todos' ? novos : novos.filter(x => quero.some(q => x.nome.toLowerCase().includes(q)));
+  if (!vale.length) return;
+  const n = new Notification({
+    title: vale.length === 1 ? `✨ Shiny ${vale[0].nome}` : `✨ ${vale.length} shinies capturados`,
+    body: vale.slice(0, 4).map(x => `${x.nick} ${x.ovo ? 'chocou' : 'capturou'} ${x.lend ? (x.mit ? 'o mítico ' : 'o lendário ') : ''}${x.nome}`).join('\n')
+  });
+  n.on('click', () => abrirShiny());
+  n.show();
+}
+
+// A conta que faz o pedido da ficha: a que viu o anúncio, se ainda estiver no jogo; senão a primeira conectada
+async function shContaConectada(preferida) {
+  const ordem = [preferida, ...views.map((_, k) => k)].filter((k, n, a) => Number.isInteger(k) && k >= 0 && k < TOTAL && a.indexOf(k) === n);
+  for (const k of ordem) {
+    const wc = views[k]?.webContents;
+    if (!wc || wc.isDestroyed() || wc.isLoading()) continue;
+    const ok = await wc.executeJavaScript('!!(window.__pkmSock && window.__pkmSock.readyState === 1 && window.__pkmShinyFicha)').catch(() => false);
+    if (ok) return k;
+  }
+  return -1;
+}
+function shNota(pk) {
+  const d = jogoLer();
+  if (!d?.especies) return null;
+  if (shCatCache?.em !== d.em) shCatCache = { em: d.em, cat: PR.catalogo(d.especies) };
+  const ivs = pk?.ivs && typeof pk.ivs === 'object' ? Object.fromEntries(IV_CHAVES.map(k => [k, Number(pk.ivs[k])])) : null;
+  if (!ivs || !IV_CHAVES.every(k => Number.isInteger(ivs[k]))) return null;
+  try { return shCatCache.cat.nota(Number(pk.speciesId), { ivs, quality: Number(pk.quality ?? pk.qualidade), potencia: Number(pk.potencia), shiny: !!pk.shiny }); } catch { return null; }
+}
+async function shFicha(nick, pk, conta) {
+  if (typeof nick !== 'string' || !nick || !(Number(pk) > 0)) return { erro: 'Esse anúncio não trouxe o número do pokémon.' };
+  const i = await shContaConectada(conta);
+  if (i < 0) return { erro: 'Nenhuma conta conectada ao jogo agora: a ficha é pedida por uma conta aberta.' };
+  const r = await views[i].webContents.executeJavaScript(`window.__pkmShinyFicha(${JSON.stringify(nick)}, ${Number(pk)})`).catch(e => ({ erro: e.message }));
+  if (!r?.pokemon) return { erro: r?.erro || 'O jogo não mandou a ficha.' };
+  const p = r.pokemon;
+  if (Number(p.speciesId) > 0) shinyPedir([Number(p.speciesId)]); // o retrato shiny, se ainda não estiver guardado
+  const notaJogo = p.nota != null && Number.isFinite(Number(p.nota)) ? Number(p.nota) : null;
+  return { pokemon: p, nota: notaJogo ?? shNota(p), conta: i, em: Date.now() };
+}
+async function shAbrirNoJogo(nick, pk, conta) {
+  const i = await shContaConectada(conta);
+  if (i < 0) return false;
+  select(i);
+  win?.focus();
+  return views[i].webContents.executeJavaScript(`window.__pkmEnviar && window.__pkmEnviar(${JSON.stringify({ t: 'chat.verPokemon', nick, pokemonId: Number(pk) })})`).catch(() => false);
+}
+
+let shEnvioRelogio = null;
+function shEnviarLogo() {
+  if (!shWin || shWin.isDestroyed() || shEnvioRelogio) return;
+  shEnvioRelogio = setTimeout(() => { shEnvioRelogio = null; shEnviar(); }, 800);
+}
+function shEnviar() {
+  if (!shWin || shWin.isDestroyed()) return;
+  const d = shLer();
+  // Espécie que entrou antes de o catálogo do jogo estar pronto: acha agora
+  if (jogoLer()?.especies) for (const x of d.lista) if (!x.sp) x.sp = shEspecie(x.nome);
+  shWin.webContents.send('shstate', { lista: d.lista, opcoes: shOpcoes(), nomes: cfg.names.slice(0, TOTAL), agora: Date.now() });
+}
+function shRetratos() {
+  if (!shWin || shWin.isDestroyed()) return;
+  const d = shinyLer();
+  shWin.webContents.send('shretratos', { looks: d.looks, img: d.img });
+}
+function abrirShiny() {
+  if (!licenca.premium()) return licenca.pedirPremium('O ✨ Monitor de Shiny');
+  if (shWin && !shWin.isDestroyed()) { if (shWin.isMinimized()) shWin.restore(); return shWin.focus(); }
+  shWin = new BrowserWindow({
+    width: 1240, height: 820, parent: win, autoHideMenuBar: true, backgroundColor: '#151515',
+    title: 'Monitor de Shiny',
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true }
+  });
+  shWin.on('page-title-updated', e => e.preventDefault());
+  shWin.loadFile(path.join(__dirname, 'shiny.html'));
+  shWin.webContents.on('did-finish-load', () => { shEnviar(); shRetratos(); });
+  shWin.on('closed', () => { shWin = null; });
+  if (!jogoLer()) jogoMontar();
+}
+ipcMain.on('sh:abrir', () => abrirShiny());
+ipcMain.on('sh:retratos', (_e, ids) => shinyPedir(Array.isArray(ids) ? ids.slice(0, 600) : []));
+ipcMain.handle('sh:ficha', (_e, nick, pk, conta) => shFicha(nick, pk, conta));
+ipcMain.handle('sh:abrirNoJogo', (_e, nick, pk, conta) => shAbrirNoJogo(nick, pk, conta));
+ipcMain.on('sh:opcoes', (_e, novo) => {
+  const o = shOpcoes();
+  if (typeof novo?.avisar === 'string') o.avisar = novo.avisar;
+  if (typeof novo?.lista === 'string') o.lista = novo.lista;
+  shOpcoes();
+  saveCfg();
+  shEnviar();
+});
+
+// Na página de cada conta: junta os anúncios de shiny que a escuta (WS_ESCUTA) entrega e faz o pedido da ficha
+const SHINY_SCRIPT = `(() => {
+  if (window.__pkmShinyChat) return;
+  const F = [];
+  const um = (x, canal) => {
+    const s = x && x.shinyCaptura, l = x && x.lendarioCaptura;
+    const c = s || (l && l.shiny ? l : null);
+    if (!c || !c.nick || !c.nome) return;
+    F.push({ id: String(x.id || ''), em: Number(x.ts) || Date.now(), nick: String(c.nick), pk: Number(c.pokemonId) || 0, nome: String(c.nome),
+      ovo: !!c.ovo, lend: !!l, mit: !!(l && l.mitico), canal: String(canal || x.canal || '') });
+  };
+  window.__pkmShinyChat = m => {
+    if (m.t === 'chat') um(m);
+    else if (m.t === 'chat.historico' && Array.isArray(m.mensagens)) for (const x of m.mensagens) um(x, m.canal);
+    else return;
+    if (F.length > 600) F.splice(0, F.length - 600);
+    if (F.length) console.debug('__pkmShinyFila');
+  };
+  window.__pkmShinyTirar = () => F.splice(0);
+  let pedido = null;
+  window.__pkmShinyFicha = (nick, pid) => new Promise(ok => {
+    if (!window.__pkmEnviar) return ok({ erro: 'a conta ainda não conectou ao jogo' });
+    if (pedido) pedido.ok({ erro: 'outro pedido de ficha passou na frente' });
+    const eu = { pid: Number(pid), ok };
+    pedido = eu;
+    window.__pkmEnviar({ t: 'chat.verPokemon', nick: nick, pokemonId: Number(pid), dica: true });
+    setTimeout(() => { if (pedido === eu) { pedido = null; ok({ erro: 'o jogo não respondeu (o pokémon pode ter sido vendido, solto ou trocado)' }); } }, 8000);
+  });
+  window.__pkmShinyFichaResp = m => {
+    const pid = Number((m.pokemon && m.pokemon.id) || m.pokemonId);
+    if (!pedido || pid !== pedido.pid) return;
+    const p = pedido;
+    pedido = null;
+    p.ok(m.pokemon ? { pokemon: m.pokemon } : { erro: 'o pokémon não existe mais (vendido, solto ou trocado)' });
+  };
+})();`;
 
 // Na página de cada conta: a fila das vitrines (a escuta WS_ESCUTA chama `vitrine`) e as etiquetas nos cards do Mercado.
 // O card é achado pelo que ele mostra: o botão "Ver ficha" (sobe do botão até o maior bloco que tem só ele), e no texto
@@ -3214,7 +3438,7 @@ async function ritmoColetar() {
       for (const c of Array.isArray(lista) ? lista : []) {
         if (typeof c?.slug !== 'string' || !c.slug || !(c.abates >= 21) || !c.heroi?.stats) continue;
         const id = `${i}:${c.inicio}:${c.slug}`, k = m.corridas.findIndex(x => x.id === id);
-        const nova = { id, conta: i, pk: c.pk ?? null, slug: c.slug, inicio: c.inicio, ultimo: c.ultimo, abates: c.abates, golpes: c.golpes || 0, saz: c.saz || '', heroi: c.heroi };
+        const nova = { id, conta: i, pk: c.pk ?? null, slug: c.slug, inicio: c.inicio, ultimo: c.ultimo, abates: c.abates, golpes: c.golpes || 0, saz: c.saz || '', esc: !!c.esc, heroi: c.heroi };
         if (k >= 0) m.corridas[k] = nova; else m.corridas.push(nova);
         mudou = true;
       }
@@ -5124,7 +5348,7 @@ function createGameView(i) {
     // A escuta vai nas 4 contas (a Reposição e a Melhor hunt usam em todas); o Sniper também (cada conta compra a
     // lista dela); o pedido-e-resposta dos monitores, só na Conta 1
     if (!licenca.premium()) return; // plano grátis: só o jogo, sem nenhum script nosso
-    wc.executeJavaScript(WS_ESCUTA + HUNT_ESCUTA + FICHA_PRECO_SCRIPT + RADAR_SCRIPT + `;window.__pkmRadar.ligar(${rdOpcoes().etiquetas})`).catch(() => {});
+    wc.executeJavaScript(WS_ESCUTA + HUNT_ESCUTA + FICHA_PRECO_SCRIPT + RADAR_SCRIPT + SHINY_SCRIPT + `;window.__pkmRadar.ligar(${rdOpcoes().etiquetas})`).catch(() => {});
     wc.executeJavaScript((i === PRECO_CONTA ? PEDIR_SCRIPT : '') + SNIPER_SCRIPT).then(() => sniperEnviarConfig(i)).catch(() => {});
     if (i === TW_AUTO_CONTA) wc.executeJavaScript(TELA_PONTOS_SCRIPT).then(twTelaEnviar).catch(() => {});
     temaAplicar(i); // 🎨 o tema da conta (a página espera o estilo do jogo carregar)
@@ -5137,6 +5361,7 @@ function createGameView(i) {
     else if (e.message.startsWith('__pkmPrecoFicha:')) prFichaDoJogo(i, e.message.slice(16));
     else if (e.message.startsWith('__pkmPrecoDetalhe:')) prFichaDetalhe(i);
     else if (e.message === '__pkmRadarFila') rdColher(i);
+    else if (e.message === '__pkmShinyFila') shColher(i);
   });
 
   // No modo grade, clicar dentro de um quadro torna aquela conta a selecionada
@@ -5681,6 +5906,7 @@ async function shinyLooksDoJogo() {
   return null;
 }
 function shinyEnviar() {
+  shRetratos(); // o ✨ Monitor de Shiny usa os mesmos retratos
   if (!pkmWin || pkmWin.isDestroyed()) return;
   const d = shinyLer();
   pkmWin.webContents.send('pkshiny', { looks: d.looks, img: d.img });

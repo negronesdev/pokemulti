@@ -1,6 +1,11 @@
 // As novidades de cada versão da venda, mostradas na ❓ Ajuda (ajuda.js, que vem do app pessoal). A cada versão nova,
 // acrescente as dela no topo.
 module.exports = [
+  { versao: '1.3.9', data: '26/11/2026', itens: [
+    ['✨ Monitor de Shiny', 'Todo shiny capturado no jogo (e os chocados de ovo), anunciado no chat: quem pegou, qual e quando, com os que mais saem e quem mais captura. Clique num para ver a ficha dele (nível, Nota, potência, qualidade e IVs). Pode avisar no Windows quando sair o shiny que você escolher.'],
+    ['🗺 Melhor hunt com o Shield do Novato', 'No dia sazonal, quem está com o Shield do Novato não enfrenta os selvagens do tipo mais fortes, e a Melhor hunt agora conta isso.'],
+    ['📡 Radar sem Outland', 'A opção "Sem Outland" tira os pokémon de Outland da lista do Radar, dos avisos e das etiquetas no Mercado do jogo.']
+  ] },
   { versao: '1.3.8', data: '23/11/2026', itens: [
     ['📡 Radar do Mercado', 'Cada anúncio de pokémon no Mercado avaliado pelas vendas reais: de CARO a EXCEPCIONAL, quanto está abaixo do mercado e o lucro já sem a taxa. Põe uma etiqueta em cada card do Mercado do jogo e avisa quando aparece uma oportunidade.'],
     ['🗺 Ir para a hunt', 'Na Melhor hunt, o botão "Ir" de cada linha leva a conta para aquela hunt. Se ela estiver em batalha, o app espera a luta acabar.'],
